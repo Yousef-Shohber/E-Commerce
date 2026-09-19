@@ -1,4 +1,4 @@
-import { DataSource, DataSourceOptions } from 'typeorm';
+import { DataSourceOptions } from 'typeorm';
 import { User } from '../src/users/users.entity';
 import { Product } from '../src/products/products.entity';
 import { Review } from '../src/reviews/reviews.entity';
@@ -14,6 +14,3 @@ export const dataSourceOptions: DataSourceOptions = {
   entities: [User, Product, Review],
   migrations: ['dist/db/migrations/*.js'],
 };
-
-const dataSource = new DataSource(dataSourceOptions);
-export default dataSource;
