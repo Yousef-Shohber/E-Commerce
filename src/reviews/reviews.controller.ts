@@ -17,7 +17,7 @@ import { CreateReviewDto } from './dtos/create-review.dot';
 import { AuthRoleGuard } from '../users/guards/auth-role.guard';
 import { Roles } from '../users/decorators/user-role.decorator';
 import { UserType } from '../utils/enums';
-import { AuthGuard } from '../users/guards/auth.guard';
+import { PaginationQueryDto } from '../utils/pagination.dto';
 import { UpdateReviewDto } from './dtos/update-review.dto';
 import { ApiSecurity } from '@nestjs/swagger';
 
@@ -41,19 +41,21 @@ export class ReviewsController {
   @UseGuards(AuthRoleGuard)
   @Roles(UserType.ADMIN)
   @ApiSecurity('bearer')
-  getAllReviews(@Query() query: any) {
+  getAllReviews(@Query() query: PaginationQueryDto) {
     return this.reviewsService.getAllReviews(query);
   }
 
   @Get(':id')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthRoleGuard)
+  @Roles(UserType.USER, UserType.ADMIN)
   @ApiSecurity('bearer')
   getReviewById(@Param('id', ParseIntPipe) id: number) {
     return this.reviewsService.getOneBy(id);
   }
 
   @Put(':id')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthRoleGuard)
+  @Roles(UserType.USER, UserType.ADMIN)
   @ApiSecurity('bearer')
   updateReview(
     @Param('id', ParseIntPipe) id: number,
@@ -64,7 +66,8 @@ export class ReviewsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthRoleGuard)
+  @Roles(UserType.USER, UserType.ADMIN)
   @ApiSecurity('bearer')
   deleteReview(
     @Param('id', ParseIntPipe) id: number,

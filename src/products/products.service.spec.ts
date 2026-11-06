@@ -22,6 +22,8 @@ describe('ProductsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             find: jest.fn(),
+            findAndCount: jest.fn(),
+            manager: { findOne: jest.fn() },
             findOne: jest.fn(),
             remove: jest.fn(),
           },
@@ -67,6 +69,7 @@ describe('ProductsService', () => {
         ...dto,
         title: 'laptop',
         user,
+        category: null,
       });
 
       expect(productsRepository.save).toHaveBeenCalledWith(product);
@@ -75,68 +78,70 @@ describe('ProductsService', () => {
   });
 
   describe('getAll', () => {
-    test('should return all products', async () => {
-      const products = [
-        {
-          id: 1,
-          title: 'laptop',
-          price: 50000,
-        },
-      ] as Product[];
+    const products = [{ id: 1, title: 'laptop', price: 50000 }] as Product[];
 
-      productsRepository.find.mockResolvedValue(products);
+    beforeEach(() => {
+      productsRepository.findAndCount.mockResolvedValue([products, 1]);
+    });
 
+    test('should return the products and the total, with default paging', async () => {
       const result = await productsService.getAll();
 
-      expect(productsRepository.find).toHaveBeenCalledWith({
+      expect(productsRepository.findAndCount).toHaveBeenCalledWith({
         where: {},
+        order: { createdAt: 'DESC', id: 'ASC' },
+        skip: 0,
+        take: 10,
       });
 
-      expect(result).toEqual(products);
+      expect(result).toEqual({ items: products, total: 1 });
     });
 
-    test('should filter products by title', async () => {
-      const products = [
-        {
-          id: 1,
-          title: 'laptop',
-          price: 50000,
-        },
-      ] as Product[];
+    test('should filter products by title (case insensitive)', async () => {
+      await productsService.getAll({ title: 'Laptop' });
 
-      productsRepository.find.mockResolvedValue(products);
-
-      const result = await productsService.getAll('laptop');
-
-      expect(productsRepository.find).toHaveBeenCalledWith({
-        where: {
-          title: expect.anything(),
-        },
-      });
-
-      expect(result).toEqual(products);
+      expect(productsRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { title: expect.anything() },
+        }),
+      );
     });
 
-    test('should filter products by price range', async () => {
-      const products = [
-        {
-          id: 1,
-          title: 'laptop',
-          price: 50000,
-        },
-      ] as Product[];
+    test('should filter by price: range, only min, only max', async () => {
+      for (const query of [
+        { minPrice: 10000, maxPrice: 60000 },
+        { minPrice: 10000 },
+        { maxPrice: 60000 },
+      ]) {
+        await productsService.getAll(query);
 
-      productsRepository.find.mockResolvedValue(products);
+        expect(productsRepository.findAndCount).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { price: expect.anything() } }),
+        );
+      }
+    });
 
-      const result = await productsService.getAll(undefined, '10000', '60000');
+    test('should reject minPrice greater than maxPrice', async () => {
+      await expect(
+        productsService.getAll({ minPrice: 100, maxPrice: 10 }),
+      ).rejects.toThrow('minPrice must not be greater than maxPrice');
+    });
 
-      expect(productsRepository.find).toHaveBeenCalledWith({
-        where: {
-          price: expect.anything(),
-        },
+    test('should paginate and sort', async () => {
+      await productsService.getAll({
+        page: 3,
+        limit: 5,
+        sortBy: 'price',
+        order: 'ASC',
       });
 
-      expect(result).toEqual(products);
+      expect(productsRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 10,
+          take: 5,
+          order: { price: 'ASC', id: 'ASC' },
+        }),
+      );
     });
   });
 

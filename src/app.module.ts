@@ -1,13 +1,10 @@
-import {
-  ClassSerializerInterceptor,
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { ClassSerializerInterceptor, Module } from '@nestjs/common';
 import { UsersModule } from './users/users.module';
 import { ProductsModule } from './products/products.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { CategoriesModule } from './categories/categories.module';
+import { CartModule } from './cart/cart.module';
+import { OrdersModule } from './orders/orders.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { UploadsModule } from './uploads/uploads.module';
@@ -16,7 +13,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { dataSourceOptions } from '../db/data-source';
 import { AppController } from './app.controller';
 import { ConfigModule } from '@nestjs/config';
-import { LoggerMiddleware } from './utils/middlewares/logger.middleware';
+import { validateEnv } from './utils/env.validation';
 
 @Module({
   controllers: [AppController],
@@ -24,22 +21,29 @@ import { LoggerMiddleware } from './utils/middlewares/logger.middleware';
     UsersModule,
     ProductsModule,
     ReviewsModule,
+    CategoriesModule,
+    CartModule,
+    OrdersModule,
     UploadsModule,
     MailModule,
     TypeOrmModule.forRoot(dataSourceOptions),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath:
-        process.env.NODE_ENV !== 'production'
-          ? `.env.${process.env.NODE_ENV}`
-          : '.env',
+        process.env.NODE_ENV === 'production'
+          ? '.env'
+          : `.env.${process.env.NODE_ENV ?? 'development'}`,
+      validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 10,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60_000,
+          limit: Number(process.env.THROTTLE_LIMIT ?? 100),
+        },
+      ],
+      skipIf: () => process.env.THROTTLE_DISABLED === 'true',
+    }),
   ],
 
   providers: [
@@ -53,11 +57,4 @@ import { LoggerMiddleware } from './utils/middlewares/logger.middleware';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    // consumer
-    //   .apply(LoggerMiddleware)
-    //   .exclude({ path: '/api/auth', method: RequestMethod.ALL })
-    //   .forRoutes({ path: '*', method: RequestMethod.ALL });
-  }
-}
+export class AppModule {}

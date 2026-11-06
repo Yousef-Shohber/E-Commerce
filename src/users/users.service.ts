@@ -3,9 +3,10 @@ import { LoginDto } from './dtos/login.dto';
 import { User } from './users.entity';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,16 +14,18 @@ import { JwtPayloadType } from '../utils/types';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { UserType } from '../utils/enums';
 import { RegisterDto } from './dtos/register.dto';
-import { join } from 'path';
-import { unlinkSync } from 'fs';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
+import { CloudinaryService } from '../utils/cloudinary.service';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly authProvider: AuthProvider,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   // Authentication
@@ -148,17 +151,17 @@ export class UserService {
    * @returns Delete Message
    */
   public async deleteUser(userId: number, payload: JwtPayloadType) {
+    if (userId !== payload.id && payload.userType !== UserType.ADMIN) {
+      throw new ForbiddenException('Access Denied, You Are Not Allowed');
+    }
+
     const user = await this.getCurrentUser(userId);
 
-    if (user.id !== payload.id && payload.userType !== UserType.ADMIN) {
-      throw new UnauthorizedException('Access Denied, You Are Not Allowed');
-    }
-
-    if (user.profileImage) {
-      await this.removeProfileImage(user.id);
-    }
-
     await this.userRepository.remove(user);
+
+    if (user.profileImagePublicId) {
+      await this.deleteImageSafely(user.profileImagePublicId);
+    }
 
     return {
       message: 'User Deleted Successfully',
@@ -178,14 +181,26 @@ export class UserService {
     file: Express.Multer.File,
   ): Promise<User> {
     const user = await this.getCurrentUser(userId);
+    const oldPublicId = user.profileImagePublicId;
 
-    if (user.profileImage) {
-      await this.removeProfileImage(userId);
+    const { url, publicId } = await this.cloudinaryService.uploadImage(file);
+
+    user.profileImage = url;
+    user.profileImagePublicId = publicId;
+
+    let saved: User;
+    try {
+      saved = await this.userRepository.save(user);
+    } catch (error) {
+      await this.deleteImageSafely(publicId);
+      throw error;
     }
 
-    user.profileImage = file.filename;
+    if (oldPublicId) {
+      await this.deleteImageSafely(oldPublicId);
+    }
 
-    return this.userRepository.save(user);
+    return saved;
   }
 
   /**
@@ -196,21 +211,25 @@ export class UserService {
   public async removeProfileImage(userId: number): Promise<User> {
     const user = await this.getCurrentUser(userId);
 
-    if (!user.profileImage) {
+    if (!user.profileImagePublicId) {
       throw new BadRequestException('No Profile Image Found');
     }
 
-    const imagePath = join(
-      process.cwd(),
-      'images',
-      'profile-images',
-      user.profileImage,
-    );
-
-    unlinkSync(imagePath);
+    await this.cloudinaryService.deleteImage(user.profileImagePublicId);
 
     user.profileImage = null;
+    user.profileImagePublicId = null;
 
     return this.userRepository.save(user);
+  }
+
+  private async deleteImageSafely(publicId: string) {
+    try {
+      await this.cloudinaryService.deleteImage(publicId);
+    } catch (error) {
+      this.logger.warn(
+        `Could not delete image ${publicId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

@@ -4,9 +4,6 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { config } from 'dotenv';
-
-config({ path: '.env.development' });
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,9 +11,11 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
+  app.enableShutdownHooks();
   app.use(helmet({ contentSecurityPolicy: false }));
 
   const swagger = new DocumentBuilder()

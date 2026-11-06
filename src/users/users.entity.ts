@@ -1,6 +1,5 @@
 import { Review } from './../reviews/reviews.entity';
 import { Product } from './../products/products.entity';
-import { CURRENT_TIMESTAMP } from '../utils/constants';
 import {
   Column,
   Entity,
@@ -9,7 +8,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 import { UserType } from '../utils/enums';
 
 @Entity({ name: 'users' })
@@ -20,6 +19,7 @@ export class User {
   @Column({ type: 'varchar', length: 150, nullable: true })
   username: string;
 
+  @Expose({ groups: ['self', 'admin'] })
   @Column({ type: 'varchar', length: 250, unique: true })
   email: string;
 
@@ -27,6 +27,7 @@ export class User {
   @Column({ type: 'varchar', nullable: true, default: null })
   password: string | null;
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, default: null, unique: true })
   googleId: string | null;
 
@@ -36,24 +37,30 @@ export class User {
   @Column({ default: false })
   isAccountVerified: boolean;
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, default: null })
   verificationToken: string | null;
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, default: null })
   resetPasswordToken: string | null;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => CURRENT_TIMESTAMP })
+  @Exclude()
+  @Column({ type: 'timestamptz', nullable: true, default: null })
+  resetPasswordExpiresAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    type: 'timestamp',
-    default: () => CURRENT_TIMESTAMP,
-    onUpdate: CURRENT_TIMESTAMP,
-  })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
   @Column({ type: 'varchar', nullable: true, default: null })
   profileImage: string | null;
+
+  @Exclude()
+  @Column({ type: 'varchar', nullable: true, default: null })
+  profileImagePublicId: string | null;
 
   @OneToMany(() => Product, (product) => product.user)
   product: Product[];

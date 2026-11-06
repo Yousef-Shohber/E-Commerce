@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, MaxLength } from 'class-validator';
+import { NormalizeEmail } from '../../utils/transforms';
 
 export class ForgetPasswordDto {
   @ApiProperty()
-  @IsString()
+  @NormalizeEmail()
+  @IsEmail()
   @MaxLength(250)
   @IsNotEmpty({ message: 'Email Is Required' })
   email: string;

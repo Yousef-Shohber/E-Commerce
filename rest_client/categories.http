@@ -1,0 +1,26 @@
+# Admin token from POST /api/users/auth/login
+@token = PASTE_YOUR_TOKEN_HERE
+
+### List categories (public)
+GET http://localhost:3000/api/categories
+
+### Create category (admin)
+POST http://localhost:3000/api/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "Books", "description": "Programming books" }
+
+### Update category (admin)
+PUT http://localhost:3000/api/categories/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "description": "All kinds of books" }
+
+### Delete category (admin) - its products stay, without a category
+DELETE http://localhost:3000/api/categories/1
+Authorization: Bearer {{token}}
+
+### Products of a category, sorted by price, page 1
+GET http://localhost:3000/api/products?categoryId=1&sortBy=price&order=ASC&page=1&limit=10

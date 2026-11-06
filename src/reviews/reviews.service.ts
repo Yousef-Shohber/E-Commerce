@@ -1,7 +1,8 @@
 import {
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Review } from './reviews.entity';
@@ -12,6 +13,8 @@ import { CreateReviewDto } from './dtos/create-review.dot';
 import { UpdateReviewDto } from './dtos/update-review.dto';
 import { JwtPayloadType } from '../utils/types';
 import { UserType } from '../utils/enums';
+import { PaginationQueryDto } from '../utils/pagination.dto';
+import { pgErrorCode } from '../utils/db-errors';
 
 @Injectable()
 export class ReviewsService {
@@ -42,7 +45,18 @@ export class ReviewsService {
       user,
       product,
     });
-    const result = await this.reviewRepository.save(review);
+
+    let result: Review;
+    try {
+      result = await this.reviewRepository.save(review);
+    } catch (error) {
+      // unique (user, product): this also protects against double clicks
+      if (pgErrorCode(error) === '23505') {
+        throw new ConflictException('You already reviewed this product');
+      }
+      throw error;
+    }
+
     return {
       id: result.id,
       rating: result.rating,
@@ -56,17 +70,16 @@ export class ReviewsService {
 
   /**
    * Get All Review
-   * @param query for Pagination
+   * @param query for Pagination (page, limit)
    * @returns All Reviews
    */
-  public getAllReviews(query?: any) {
-    const page = query.page || 1;
-    const limit = query.limit || 2;
-    const skip = (page - 1) * limit || 0;
+  public getAllReviews(query: PaginationQueryDto = {}) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
 
     return this.reviewRepository.find({
-      order: { createdAt: 'DESC' },
-      skip,
+      order: { createdAt: 'DESC', id: 'DESC' },
+      skip: (page - 1) * limit,
       take: limit,
     });
   }
@@ -97,7 +110,7 @@ export class ReviewsService {
   ) {
     const review = await this.getOneBy(reviewId);
     if (review.user.id !== userId) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         'You are not authorized to update this review',
       );
     }
@@ -115,7 +128,7 @@ export class ReviewsService {
   public async deleteReview(reviewId: number, payload: JwtPayloadType) {
     const review = await this.getOneBy(reviewId);
     if (review.user.id !== payload.id && payload.userType !== UserType.ADMIN) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         'You are not authorized to delete this review',
       );
     }

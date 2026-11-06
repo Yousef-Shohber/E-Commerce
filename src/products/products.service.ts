@@ -1,10 +1,23 @@
 import { UserService } from './../users/users.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateProductDto } from './dtos/create-product.dto';
 import { UpdateProductDto } from './dtos/update-product.dbo';
-import { Like, Between, Repository } from 'typeorm';
+import { ProductsQueryDto } from './dtos/products-query.dto';
+import {
+  FindOperator,
+  ILike,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Repository,
+} from 'typeorm';
 import { Product } from './products.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Category } from '../categories/categories.entity';
 
 @Injectable()
 export class ProductsService {
@@ -22,28 +35,62 @@ export class ProductsService {
    */
   public async CreateProduct(userId: number, dto: CreateProductDto) {
     const user = await this.userService.getCurrentUser(userId);
+    const { categoryId, ...data } = dto;
+
     const newProduct = this.productsRepository.create({
-      ...dto,
+      ...data,
       title: dto.title.toLowerCase(),
       user,
+      category: await this.findCategory(categoryId),
     });
     return await this.productsRepository.save(newProduct);
   }
 
   /**
-   * Get All Product
-   * @returns All Products
+   * Get All Product (filter, sort and paginate)
+   * @returns Products and the total number of matches
    */
-  public getAll(title?: string, minPrice?: string, maxPrice?: string) {
-    const filter = {
-      ...(title ? { title: Like(`%${title}%`) } : {}),
-      ...(minPrice && maxPrice
-        ? { price: Between(parseInt(minPrice), parseInt(maxPrice)) }
-        : {}),
+  public async getAll(query: ProductsQueryDto = {}) {
+    const { title, minPrice, maxPrice, categoryId } = query;
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+
+    if (
+      minPrice !== undefined &&
+      maxPrice !== undefined &&
+      minPrice > maxPrice
+    ) {
+      throw new BadRequestException(
+        'minPrice must not be greater than maxPrice',
+      );
+    }
+
+    let price: FindOperator<number> | undefined;
+    if (minPrice !== undefined && maxPrice !== undefined) {
+      price = Between(minPrice, maxPrice);
+    } else if (minPrice !== undefined) {
+      price = MoreThanOrEqual(minPrice);
+    } else if (maxPrice !== undefined) {
+      price = LessThanOrEqual(maxPrice);
+    }
+
+    const where = {
+      ...(title ? { title: ILike(`%${escapeLike(title)}%`) } : {}),
+      ...(price ? { price } : {}),
+      ...(categoryId ? { category: { id: categoryId } } : {}),
     };
-    return this.productsRepository.find({
-      where: filter,
+
+    const [items, total] = await this.productsRepository.findAndCount({
+      where,
+      order: {
+        [query.sortBy ?? 'createdAt']: query.order ?? 'DESC',
+        id: 'ASC',
+      },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+
+    return { items, total };
   }
 
   /**
@@ -74,6 +121,11 @@ export class ProductsService {
     if (dto.title) product.title = dto.title.toLowerCase();
     product.description = dto.description ?? product.description;
     product.price = dto.price ?? product.price;
+    product.stock = dto.stock ?? product.stock;
+
+    if (dto.categoryId !== undefined) {
+      product.category = await this.findCategory(dto.categoryId);
+    }
 
     return await this.productsRepository.save(product);
   }
@@ -89,4 +141,25 @@ export class ProductsService {
     await this.productsRepository.remove(product);
     return { message: 'Product Deleted Successfully' };
   }
+
+  private async findCategory(
+    categoryId?: number | null,
+  ): Promise<Category | null> {
+    if (!categoryId) return null;
+
+    const category = await this.productsRepository.manager.findOne(Category, {
+      where: { id: categoryId },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Category with id ${categoryId} not found`);
+    }
+
+    return category;
+  }
+}
+
+/** Escape % and _ so they are searched as normal characters */
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }

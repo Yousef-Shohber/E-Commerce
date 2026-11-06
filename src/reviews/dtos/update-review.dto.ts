@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsNumber,
+  IsInt,
+  MaxLength,
   IsOptional,
   IsString,
   Max,
@@ -10,7 +11,7 @@ import {
 
 export class UpdateReviewDto {
   @ApiPropertyOptional()
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @Max(5)
   @IsOptional()
@@ -19,6 +20,7 @@ export class UpdateReviewDto {
   @ApiPropertyOptional()
   @IsString()
   @MinLength(2)
+  @MaxLength(1000)
   @IsOptional()
   comment?: string;
 }

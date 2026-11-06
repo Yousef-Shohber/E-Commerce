@@ -11,7 +11,7 @@ import {
   Post,
   Put,
   Req,
-  Res,
+  SerializeOptions,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -27,10 +27,10 @@ import { UserType } from '../utils/enums';
 import { AuthRoleGuard } from './guards/auth-role.guard';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
 import { ForgetPasswordDto } from './dtos/forget-password.dto';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
-import { ApiBody, ApiConsumes, ApiQuery, ApiSecurity } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiSecurity } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { ImageUploadedDto } from './dtos/image-upload.dto';
 import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 
@@ -41,11 +41,13 @@ export class UsersController {
   // Authentication
 
   @Post('auth/register')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   public register(@Body() body: RegisterDto) {
     return this.userService.register(body);
   }
 
   @Post('auth/login')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   public login(@Body() body: LoginDto) {
     return this.userService.login(body);
@@ -60,6 +62,7 @@ export class UsersController {
   }
 
   @Post('forgot-password')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   public forgotPassword(@Body() body: ForgetPasswordDto) {
     return this.userService.sendResetPassword(body.email);
@@ -74,6 +77,7 @@ export class UsersController {
   }
 
   @Post('reset-password')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   public resetPassword(@Body() body: ResetUserPasswordDto) {
     return this.userService.resetPassword(body);
@@ -94,6 +98,7 @@ export class UsersController {
   // Current User
 
   @Get('current-user')
+  @SerializeOptions({ groups: ['self'] })
   @UseGuards(AuthGuard)
   @ApiSecurity('bearer')
   public getUser(@CurrentUser() payload: JwtPayloadType) {
@@ -101,6 +106,7 @@ export class UsersController {
   }
 
   @Put()
+  @SerializeOptions({ groups: ['self'] })
   @Roles(UserType.ADMIN, UserType.USER)
   @UseGuards(AuthRoleGuard)
   @ApiSecurity('bearer')
@@ -114,6 +120,7 @@ export class UsersController {
   // Profile Image
 
   @Post('profile-image')
+  @SerializeOptions({ groups: ['self'] })
   @UseGuards(AuthGuard)
   @UseInterceptors(FileInterceptor('profile-image'))
   @ApiSecurity('bearer')
@@ -130,16 +137,8 @@ export class UsersController {
     return this.userService.uploadProfileImage(payload.id, file);
   }
 
-  @Get('images/:image')
-  @UseGuards(AuthGuard)
-  @ApiSecurity('bearer')
-  public getImage(@Param('image') image: string, @Res() res: Response) {
-    return res.sendFile(image, {
-      root: 'images/profile-images',
-    });
-  }
-
   @Delete('profile-image')
+  @SerializeOptions({ groups: ['self'] })
   @UseGuards(AuthGuard)
   @ApiSecurity('bearer')
   public deleteProfileImage(@CurrentUser() payload: JwtPayloadType) {
@@ -149,6 +148,7 @@ export class UsersController {
   // Admin
 
   @Get()
+  @SerializeOptions({ groups: ['admin'] })
   @Roles(UserType.ADMIN)
   @UseGuards(AuthRoleGuard)
   @ApiSecurity('bearer')

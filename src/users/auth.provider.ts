@@ -11,10 +11,17 @@ import { Repository } from 'typeorm';
 import { RegisterDto } from './dtos/register.dto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { JwtPayloadType } from '../utils/types';
+import { AccessTokenType, JwtPayloadType } from '../utils/types';
 import { randomBytes } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
+import { pgErrorCode } from '../utils/db-errors';
+import { safeEqual } from '../utils/safe-equal';
+
+// Used so login takes the same time whether or not the email exists
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 @Injectable()
 export class AuthProvider {
@@ -46,14 +53,29 @@ export class AuthProvider {
       verificationToken: randomBytes(32).toString('hex'),
     });
 
-    newUser = await this.userRepository.save(newUser);
+    try {
+      newUser = await this.userRepository.save(newUser);
+    } catch (error) {
+      // two requests with the same email at the same time
+      if (pgErrorCode(error) === '23505') {
+        throw new BadRequestException('User Already Exist');
+      }
+      throw error;
+    }
 
     const link = this.generateVerifyLink(
       newUser.id,
       newUser.verificationToken!,
     );
 
-    await this.mailService.sendVerificationToken(newUser.email, link);
+    try {
+      await this.mailService.sendVerificationToken(newUser.email, link);
+    } catch (error) {
+      // Partial failure: user saved but the email failed. Remove the user so
+      // the person can simply try to register again.
+      await this.userRepository.delete(newUser.id);
+      throw error;
+    }
 
     return {
       message:
@@ -66,13 +88,13 @@ export class AuthProvider {
       where: { email: dto.email },
     });
 
-    if (!user) {
-      throw new BadRequestException('Invalid Email or Password');
-    }
+    // Google-only accounts have no password, so they can't log in here
+    const isPasswordMatch = await bcrypt.compare(
+      dto.password,
+      user?.password ?? DUMMY_HASH,
+    );
 
-    const isPasswordMatch = await bcrypt.compare(dto.password, user.password);
-
-    if (!isPasswordMatch) {
+    if (!user || !user.password || !isPasswordMatch) {
       throw new BadRequestException('Invalid Email or Password');
     }
 
@@ -119,7 +141,7 @@ export class AuthProvider {
       throw new BadRequestException('No Verification Token Provided');
     }
 
-    if (user.verificationToken !== verificationToken) {
+    if (!safeEqual(user.verificationToken, verificationToken)) {
       throw new BadRequestException('Invalid Verification Token');
     }
 
@@ -142,6 +164,7 @@ export class AuthProvider {
 
     if (user) {
       user.resetPasswordToken = randomBytes(32).toString('hex');
+      user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
       await this.userRepository.save(user);
 
@@ -150,7 +173,12 @@ export class AuthProvider {
         user.resetPasswordToken,
       );
 
-      await this.mailService.sendResetPassword(email, link);
+      try {
+        await this.mailService.sendResetPassword(email, link);
+      } catch {
+        // already logged by MailService; the response stays the same so we
+        // don't reveal whether the email exists
+      }
     }
 
     return {
@@ -175,8 +203,12 @@ export class AuthProvider {
       throw new BadRequestException('No Reset Token Provided');
     }
 
-    if (user.resetPasswordToken !== resetPasswordToken) {
-      throw new BadRequestException('Invalid Reset Token');
+    if (
+      !safeEqual(user.resetPasswordToken, resetPasswordToken) ||
+      !user.resetPasswordExpiresAt ||
+      user.resetPasswordExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Invalid Or Expired Reset Token');
     }
 
     return {
@@ -195,18 +227,26 @@ export class AuthProvider {
       throw new NotFoundException('User Not Found');
     }
 
-    if (!resetPasswordToken) {
-      throw new BadRequestException('No Reset Token Provided');
+    const password = await this.hashPassword(newPassword);
+
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({
+        password,
+        resetPasswordToken: null,
+        resetPasswordExpiresAt: null,
+      })
+      .where('id = :userId', { userId })
+      .andWhere('"resetPasswordToken" = :resetPasswordToken', {
+        resetPasswordToken,
+      })
+      .andWhere('"resetPasswordExpiresAt" > now()')
+      .execute();
+
+    if (!result.affected) {
+      throw new BadRequestException('Invalid Or Expired Reset Token');
     }
-
-    if (user.resetPasswordToken !== resetPasswordToken) {
-      throw new BadRequestException('Invalid Reset Token');
-    }
-
-    user.password = await this.hashPassword(newPassword);
-    user.resetPasswordToken = null;
-
-    await this.userRepository.save(user);
 
     return {
       message: 'Password Reset Successfully, Please Login',
@@ -222,32 +262,61 @@ export class AuthProvider {
 
   public async validateGoogleUser(data: {
     googleId: string;
-    email: string;
+    email?: string;
     username: string;
   }) {
+    if (!data.email) {
+      throw new BadRequestException('Your Google account has no email');
+    }
+
+    const email = data.email.trim().toLowerCase();
+
     let user = await this.userRepository.findOne({
-      where: [{ googleId: data.googleId }, { email: data.email }],
+      where: { googleId: data.googleId },
     });
 
+    if (user) return user;
+
+    user = await this.userRepository.findOne({ where: { email } });
+
     if (user) {
-      if (!user.googleId) {
-        user.googleId = data.googleId;
-        user = await this.userRepository.save(user);
+      user.googleId = data.googleId;
+
+      if (!user.isAccountVerified) {
+        // Someone may have registered this email with a password they chose
+        // before the real owner signed in with Google. Google proves the
+        // email is theirs, so we drop the old password and tokens.
+        user.isAccountVerified = true;
+        user.password = null;
+        user.verificationToken = null;
+        user.resetPasswordToken = null;
+        user.resetPasswordExpiresAt = null;
       }
-      return user;
+
+      return this.userRepository.save(user);
     }
 
     user = this.userRepository.create({
       googleId: data.googleId,
-      email: data.email,
+      email,
       username: data.username,
       isAccountVerified: true,
     });
 
-    return this.userRepository.save(user);
+    try {
+      return await this.userRepository.save(user);
+    } catch (error) {
+      // two Google logins at the same time created the same user
+      if (pgErrorCode(error) === '23505') {
+        return this.userRepository.findOneOrFail({
+          where: { googleId: data.googleId },
+        });
+      }
+      throw error;
+    }
   }
 
-  public async loginWithGoogle(user: User) {
+  public async loginWithGoogle(user: User): Promise<AccessTokenType> {
     const accessToken = await this.generateJwt({
       id: user.id,
       userType: user.userType,

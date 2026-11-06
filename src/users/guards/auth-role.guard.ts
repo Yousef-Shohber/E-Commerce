@@ -15,6 +15,7 @@ import { TokenExpiredError } from 'jsonwebtoken';
 import { JwtPayloadType } from '../../utils/types';
 import { CURRENT_USER_KEY } from '../../utils/constants';
 import { UserType } from '../../utils/enums';
+import { User } from '../users.entity';
 
 @Injectable()
 export class AuthRoleGuard implements CanActivate {
@@ -56,12 +57,18 @@ export class AuthRoleGuard implements CanActivate {
       throw new UnauthorizedException('Access Denied, Invalid Token');
     }
 
-    const user = await this.userService.getCurrentUser(payload.id);
+    let user: User;
+    try {
+      user = await this.userService.getCurrentUser(payload.id);
+    } catch {
+      throw new UnauthorizedException('Access Denied, User no longer exists');
+    }
+
     if (!roles.includes(user.userType)) {
       throw new ForbiddenException('Access Denied, Not Allowed');
     }
 
-    request[CURRENT_USER_KEY] = payload;
+    request[CURRENT_USER_KEY] = { id: user.id, userType: user.userType };
     return true;
   }
 }

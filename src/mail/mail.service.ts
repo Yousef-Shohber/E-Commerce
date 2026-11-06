@@ -1,8 +1,14 @@
 import { MailerService } from '@nestjs-modules/mailer';
-import { Injectable, RequestTimeoutException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
+
   constructor(private readonly mailerService: MailerService) {}
 
   /**
@@ -11,18 +17,7 @@ export class MailService {
    * @param link with id and verification token
    */
   public async sendVerificationToken(email: string, link: string) {
-    try {
-      await this.mailerService.sendMail({
-        to: email,
-        from: 'Nest JS',
-        subject: 'Verification',
-        template: 'verification-token',
-        context: { link },
-      });
-    } catch (error) {
-      console.log(error);
-      throw new RequestTimeoutException();
-    }
+    await this.send(email, 'Verification', 'verification-token', { link });
   }
 
   /**
@@ -31,17 +26,27 @@ export class MailService {
    * @param resetPasswordlink
    */
   public async sendResetPassword(email: string, resetPasswordlink: string) {
+    await this.send(email, 'Reset Password', 'reset-password', {
+      resetPasswordlink,
+    });
+  }
+
+  private async send(
+    to: string,
+    subject: string,
+    template: string,
+    context: Record<string, string>,
+  ) {
     try {
-      await this.mailerService.sendMail({
-        to: email,
-        from: 'Nest JS',
-        subject: 'Reset Password',
-        template: 'reset-password',
-        context: { resetPasswordlink },
-      });
+      await this.mailerService.sendMail({ to, subject, template, context });
     } catch (error) {
-      console.log(error);
-      throw new RequestTimeoutException();
+      this.logger.error(
+        `Failed to send "${subject}" email`,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw new ServiceUnavailableException(
+        'Could not send the email, please try again later',
+      );
     }
   }
 }

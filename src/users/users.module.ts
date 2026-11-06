@@ -8,14 +8,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthProvider } from './auth.provider';
 import { MulterModule } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { MailModule } from '../mail/mail.module';
 import { GoogleStrategy } from './google.strategy';
 import { PassportModule } from '@nestjs/passport';
+import { CloudinaryService } from '../utils/cloudinary.service';
 
 @Module({
   controllers: [UsersController],
-  providers: [UserService, AuthProvider, GoogleStrategy],
+  providers: [UserService, AuthProvider, GoogleStrategy, CloudinaryService],
   exports: [UserService],
   imports: [
     MailModule,
@@ -34,16 +35,9 @@ import { PassportModule } from '@nestjs/passport';
       },
     }),
     MulterModule.register({
-      storage: diskStorage({
-        destination: './images/profile-images',
-        filename: (req, file, cb) => {
-          const prefix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const filename = `${prefix}-${file.originalname}`;
-          cb(null, filename);
-        },
-      }),
+      storage: memoryStorage(),
 
-      fileFilter: (req, file, cb) => {
+      fileFilter: (_req, file, cb) => {
         if (!file.mimetype.startsWith('image/')) {
           return cb(
             new BadRequestException('Only image files are allowed'),
@@ -53,9 +47,7 @@ import { PassportModule } from '@nestjs/passport';
         cb(null, true);
       },
 
-      limits: {
-        fileSize: 2 * 1024 * 1024,
-      },
+      limits: { fileSize: 2 * 1024 * 1024 },
     }),
   ],
 })

@@ -10,15 +10,18 @@ import {
   ParseIntPipe,
   UseGuards,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { CreateProductDto } from './dtos/create-product.dto';
 import { UpdateProductDto } from './dtos/update-product.dbo';
+import { ProductsQueryDto } from './dtos/products-query.dto';
 import { ProductsService } from './products.service';
 import { Roles } from '../users/decorators/user-role.decorator';
 import { UserType } from '../utils/enums';
 import { AuthRoleGuard } from '../users/guards/auth-role.guard';
 import { CurrentUser } from '../users/decorators/current-user.decorator';
-import { ApiQuery, ApiSecurity } from '@nestjs/swagger';
+import { ApiSecurity } from '@nestjs/swagger';
 
 @Controller('/api/products')
 export class ProductsController {
@@ -36,31 +39,13 @@ export class ProductsController {
   }
 
   @Get()
-  @ApiQuery({
-    name: 'title',
-    required: false,
-    type: 'string',
-    description: 'title for product',
-    example: 'laptop',
-  })
-  @ApiQuery({
-    name: 'minPrice',
-    required: false,
-    type: 'number',
-    description: 'mim price for product',
-  })
-  @ApiQuery({
-    name: 'maxPrice',
-    required: false,
-    type: 'number',
-    description: 'max price for product',
-  })
-  public getProducts(
-    @Query('title') title: string,
-    @Query('minPrice') minPrice: string,
-    @Query('maxPrice') maxPrice: string,
+  public async getProducts(
+    @Query() query: ProductsQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.ProductsService.getAll(title, minPrice, maxPrice);
+    const { items, total } = await this.ProductsService.getAll(query);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Get('/:id')

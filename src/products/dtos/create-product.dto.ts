@@ -1,5 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsNotEmpty, Min, Length } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNumber,
+  IsNotEmpty,
+  Min,
+  Length,
+  IsInt,
+  IsOptional,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateProductDto {
   @ApiProperty()
@@ -11,6 +20,7 @@ export class CreateProductDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty({ message: 'Description is required' })
+  @MaxLength(2000)
   description: string;
 
   @ApiProperty()
@@ -18,4 +28,16 @@ export class CreateProductDto {
   @IsNotEmpty({ message: 'Price is required' })
   @Min(0, { message: 'Price must be a positive number' })
   price: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  stock?: number;
+
+  @ApiPropertyOptional({ description: 'Category id' })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  categoryId?: number;
 }

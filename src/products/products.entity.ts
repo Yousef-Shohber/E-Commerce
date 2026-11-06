@@ -6,12 +6,14 @@ import {
   PrimaryGeneratedColumn,
   OneToMany,
   ManyToOne,
+  Check,
 } from 'typeorm';
 import { User } from '../users/users.entity';
 import { Review } from '../reviews/reviews.entity';
-import { CURRENT_TIMESTAMP } from '../utils/constants';
+import { Category } from '../categories/categories.entity';
 
 @Entity({ name: 'products' })
+@Check('"stock" >= 0')
 export class Product {
   @PrimaryGeneratedColumn()
   id: number;
@@ -25,14 +27,13 @@ export class Product {
   @Column({ type: 'float' })
   price: number;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => CURRENT_TIMESTAMP })
+  @Column({ type: 'int', default: 0 })
+  stock: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    type: 'timestamp',
-    default: () => CURRENT_TIMESTAMP,
-    onUpdate: CURRENT_TIMESTAMP,
-  })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
   @OneToMany(() => Review, (review) => review.product, { eager: true })
@@ -43,4 +44,11 @@ export class Product {
     onDelete: 'CASCADE',
   })
   user: User;
+
+  @ManyToOne(() => Category, (category) => category.products, {
+    eager: true,
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  category: Category | null;
 }

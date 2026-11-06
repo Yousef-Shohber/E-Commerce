@@ -1,6 +1,5 @@
 import { User } from './../users/users.entity';
 import { Product } from './../products/products.entity';
-import { CURRENT_TIMESTAMP } from '../utils/constants';
 import {
   Column,
   Entity,
@@ -8,9 +7,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  Unique,
 } from 'typeorm';
 
 @Entity({ name: 'reviews' })
+@Unique(['user', 'product'])
 export class Review {
   @PrimaryGeneratedColumn()
   id: number;
@@ -21,14 +22,10 @@ export class Review {
   @Column()
   comment: string;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => CURRENT_TIMESTAMP })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    type: 'timestamp',
-    default: () => CURRENT_TIMESTAMP,
-    onUpdate: CURRENT_TIMESTAMP,
-  })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
   @ManyToOne(() => Product, (product) => product.reviews, {

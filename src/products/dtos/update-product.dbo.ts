@@ -2,10 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsOptional,
   IsString,
-  IsNotEmpty,
   Length,
   IsNumber,
   Min,
+  IsInt,
+  MaxLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateProductDto {
@@ -17,6 +19,7 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional()
   @IsString()
+  @MaxLength(2000)
   @IsOptional()
   description?: string;
 
@@ -25,4 +28,20 @@ export class UpdateProductDto {
   @Min(0, { message: 'Price must be a positive number' })
   @IsOptional()
   price?: number;
+
+  @ApiPropertyOptional()
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  stock?: number;
+
+  @ApiPropertyOptional({
+    description: 'Category id (send null to remove the category)',
+    nullable: true,
+  })
+  @ValidateIf((_o, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  categoryId?: number | null;
 }

@@ -3,6 +3,11 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
+  "setupFiles": ["<rootDir>/setup-env.ts"],
+  "testTimeout": 60000,
+  "transformIgnorePatterns": [
+    "node_modules/(?!(dotenv-expand|@nestjs/config)/)"
+  ],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }
