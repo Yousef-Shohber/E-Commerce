@@ -1,20 +1,17 @@
 import { Module } from '@nestjs/common';
-import { ReviewsController } from './reviews.controller';
-import { ReviewsService } from './reviews.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Review } from './reviews.entity';
 import { ProductsModule } from '../products/products.module';
 import { UsersModule } from '../users/users.module';
-import { JwtModule } from '@nestjs/jwt';
+import { Review } from './reviews.entity';
+import {
+  ProductReviewsController,
+  ReviewsController,
+} from './reviews.controller';
+import { ReviewsService } from './reviews.service';
 
 @Module({
-  controllers: [ReviewsController],
+  controllers: [ReviewsController, ProductReviewsController],
   providers: [ReviewsService],
-  imports: [
-    TypeOrmModule.forFeature([Review]),
-    ProductsModule,
-    UsersModule,
-    JwtModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Review]), ProductsModule, UsersModule],
 })
 export class ReviewsModule {}

@@ -7,28 +7,24 @@ import {
   ParseIntPipe,
   Post,
   Put,
-  UseGuards,
   Query,
 } from '@nestjs/common';
-import { ReviewsService } from './reviews.service';
-import { CurrentUser } from '../users/decorators/current-user.decorator';
-import type { JwtPayloadType } from '../utils/types';
-import { CreateReviewDto } from './dtos/create-review.dot';
-import { AuthRoleGuard } from '../users/guards/auth-role.guard';
-import { Roles } from '../users/decorators/user-role.decorator';
-import { UserType } from '../utils/enums';
-import { PaginationQueryDto } from '../utils/pagination.dto';
+import { ApiTags } from '@nestjs/swagger';
+import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
+import { UserType } from '../common/enums';
+import { PaginationQueryDto } from '../common/pagination';
+import type { JwtPayloadType } from '../common/types';
+import { CreateReviewDto } from './dtos/create-review.dto';
 import { UpdateReviewDto } from './dtos/update-review.dto';
-import { ApiSecurity } from '@nestjs/swagger';
+import { ReviewsService } from './reviews.service';
 
-@Controller('api/reviews')
+@ApiTags('Reviews')
+@Controller('reviews')
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
   @Post(':productId')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.USER, UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth()
   public createReview(
     @Param('productId', ParseIntPipe) productId: number,
     @CurrentUser() payload: JwtPayloadType,
@@ -38,25 +34,20 @@ export class ReviewsController {
   }
 
   @Get()
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
+  @ApiPaginated()
   getAllReviews(@Query() query: PaginationQueryDto) {
     return this.reviewsService.getAllReviews(query);
   }
 
   @Get(':id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.USER, UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth()
   getReviewById(@Param('id', ParseIntPipe) id: number) {
     return this.reviewsService.getOneBy(id);
   }
 
   @Put(':id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.USER, UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth()
   updateReview(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateReviewDto,
@@ -66,13 +57,28 @@ export class ReviewsController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.USER, UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth()
   deleteReview(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() payload: JwtPayloadType,
   ) {
     return this.reviewsService.deleteReview(id, payload);
+  }
+}
+
+/** The reviews of a product are a part of the product's URL */
+@ApiTags('Reviews')
+@Controller('products/:productId/reviews')
+export class ProductReviewsController {
+  constructor(private readonly reviewsService: ReviewsService) {}
+
+  @Public()
+  @Get()
+  @ApiPaginated('A page of reviews, newest first')
+  getProductReviews(
+    @Param('productId', ParseIntPipe) productId: number,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.reviewsService.getForProduct(productId, query);
   }
 }

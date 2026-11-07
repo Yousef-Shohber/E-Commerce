@@ -9,12 +9,16 @@ import { Review } from './reviews.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserService } from '../users/users.service';
 import { ProductsService } from '../products/products.service';
-import { CreateReviewDto } from './dtos/create-review.dot';
+import { CreateReviewDto } from './dtos/create-review.dto';
 import { UpdateReviewDto } from './dtos/update-review.dto';
-import { JwtPayloadType } from '../utils/types';
-import { UserType } from '../utils/enums';
-import { PaginationQueryDto } from '../utils/pagination.dto';
-import { pgErrorCode } from '../utils/db-errors';
+import { JwtPayloadType } from '../common/types';
+import { UserType } from '../common/enums';
+import {
+  Paginated,
+  PaginationQueryDto,
+  resolvePagination,
+} from '../common/pagination';
+import { PG_ERROR, pgErrorCode } from '../common/utils';
 
 @Injectable()
 export class ReviewsService {
@@ -50,8 +54,7 @@ export class ReviewsService {
     try {
       result = await this.reviewRepository.save(review);
     } catch (error) {
-      // unique (user, product): this also protects against double clicks
-      if (pgErrorCode(error) === '23505') {
+      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
         throw new ConflictException('You already reviewed this product');
       }
       throw error;
@@ -69,19 +72,44 @@ export class ReviewsService {
   }
 
   /**
-   * Get All Review
+   * Get All Review (Admin)
    * @param query for Pagination (page, limit)
-   * @returns All Reviews
+   * @returns A page of reviews and the total
    */
-  public getAllReviews(query: PaginationQueryDto = {}) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
+  public async getAllReviews(query: PaginationQueryDto = {}) {
+    const { skip, take } = resolvePagination(query);
 
-    return this.reviewRepository.find({
+    const [items, total] = await this.reviewRepository.findAndCount({
       order: { createdAt: 'DESC', id: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip,
+      take,
     });
+
+    return Paginated.of(items, total, query);
+  }
+
+  /**
+   * Reviews Of One Product (public)
+   * @param productId for Product
+   * @param query for Pagination (page, limit)
+   * @returns A page of reviews, newest first, and the total
+   */
+  public async getForProduct(
+    productId: number,
+    query: PaginationQueryDto = {},
+  ) {
+    await this.productService.getOneBy(productId);
+
+    const { skip, take } = resolvePagination(query);
+
+    const [items, total] = await this.reviewRepository.findAndCount({
+      where: { product: { id: productId } },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      skip,
+      take,
+    });
+
+    return Paginated.of(items, total, query);
   }
 
   /**

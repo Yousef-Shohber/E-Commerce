@@ -8,10 +8,12 @@ import {
   UpdateDateColumn,
   ManyToOne,
   Unique,
+  Index,
 } from 'typeorm';
 
 @Entity({ name: 'reviews' })
 @Unique(['user', 'product'])
+@Index(['product'])
 export class Review {
   @PrimaryGeneratedColumn()
   id: number;
