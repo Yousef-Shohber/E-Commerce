@@ -16,7 +16,7 @@ import type { JwtPayloadType } from '../common/types';
 import { WishlistService } from './wishlist.service';
 
 @ApiTags('Wishlist')
-@Controller('/api/wishlist')
+@Controller('wishlist')
 @Auth()
 export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}
