@@ -12,7 +12,6 @@ export class MailService {
   constructor(private readonly mailerService: MailerService) {}
 
   /**
-   *
    * @param email of register user
    * @param link with id and verification token
    */

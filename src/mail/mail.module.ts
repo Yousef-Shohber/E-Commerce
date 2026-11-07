@@ -23,13 +23,7 @@ import { EjsAdapter } from '@nestjs-modules/mailer/adapters/ejs.adapter';
             },
           },
 
-          // A bare "Nest JS" is not a valid sender address (SMTP servers
-          // reject it), so we always send "Name <address>".
-          defaults: {
-            from:
-              config.get<string>('MAIL_FROM') ??
-              `"Nest JS" <${username.includes('@') ? username : 'noreply@localhost'}>`,
-          },
+          defaults: { from: config.get<string>('MAIL_FROM') },
 
           template: {
             dir: join(__dirname, 'templates'),
