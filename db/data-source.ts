@@ -5,6 +5,9 @@ import { Review } from '../src/reviews/reviews.entity';
 import { Category } from '../src/categories/categories.entity';
 import { CartItem } from '../src/cart/cart-item.entity';
 import { Order } from '../src/orders/orders.entity';
+import { ProductImage } from '../src/products/product-image.entity';
+import { Coupon } from '../src/coupons/coupon.entity';
+import { WishlistItem } from '../src/wishlist/wishlist-item.entity';
 import { OrderItem } from '../src/orders/order-item.entity';
 import { config } from 'dotenv';
 
@@ -15,7 +18,18 @@ config({ path: '.env' });
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: [User, Product, Review, Category, CartItem, Order, OrderItem],
+  entities: [
+    User,
+    Product,
+    ProductImage,
+    Review,
+    Category,
+    CartItem,
+    Coupon,
+    Order,
+    OrderItem,
+    WishlistItem,
+  ],
   migrations: ['dist/db/migrations/*.js'],
 };
 
