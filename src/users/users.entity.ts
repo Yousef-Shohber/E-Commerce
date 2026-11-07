@@ -9,7 +9,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Exclude, Expose } from 'class-transformer';
-import { UserType } from '../utils/enums';
+import { UserType } from '../common/enums';
 
 @Entity({ name: 'users' })
 export class User {

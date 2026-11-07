@@ -6,7 +6,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { NormalizeEmail } from '../../utils/transforms';
+import { NormalizeEmail } from '../../common/transforms';
 
 export class LoginDto {
   @ApiProperty()

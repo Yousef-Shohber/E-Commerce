@@ -16,36 +16,38 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import type { JwtPayloadType } from '../utils/types';
-import { CurrentUser } from './decorators/current-user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { Auth, CurrentUser, Public } from '../common/decorators';
+import { UserType } from '../common/enums';
+import type { JwtPayloadType } from '../common/types';
+import { imageUploadOptions } from '../common/upload';
+import { ForgetPasswordDto } from './dtos/forget-password.dto';
+import { ImageUploadedDto } from './dtos/image-upload.dto';
 import { LoginDto } from './dtos/login.dto';
 import { RegisterDto } from './dtos/register.dto';
-import { AuthGuard } from './guards/auth.guard';
-import { UserService } from './users.service';
-import { Roles } from './decorators/user-role.decorator';
-import { UserType } from '../utils/enums';
-import { AuthRoleGuard } from './guards/auth-role.guard';
-import { UpdateUserDto } from './dtos/update-user.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ForgetPasswordDto } from './dtos/forget-password.dto';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
-import { ApiBody, ApiConsumes, ApiSecurity } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
-import { ImageUploadedDto } from './dtos/image-upload.dto';
-import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
+import { UpdateUserDto } from './dtos/update-user.dto';
+import { User } from './users.entity';
+import { UserService } from './users.service';
 
+@ApiTags('Users')
 @Controller('/api/users')
 export class UsersController {
   constructor(private readonly userService: UserService) {}
 
   // Authentication
 
+  @Public()
   @Post('auth/register')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   public register(@Body() body: RegisterDto) {
     return this.userService.register(body);
   }
 
+  @Public()
   @Post('auth/login')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
@@ -53,6 +55,7 @@ export class UsersController {
     return this.userService.login(body);
   }
 
+  @Public()
   @Get('verify-email/:id/:verificationToken')
   public verifyEmail(
     @Param('id', ParseIntPipe) id: number,
@@ -61,6 +64,7 @@ export class UsersController {
     return this.userService.verifyEmail(id, verificationToken);
   }
 
+  @Public()
   @Post('forgot-password')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
@@ -68,6 +72,7 @@ export class UsersController {
     return this.userService.sendResetPassword(body.email);
   }
 
+  @Public()
   @Get('reset-password/:id/:resetPasswordToken')
   public getResetPassword(
     @Param('id', ParseIntPipe) id: number,
@@ -76,6 +81,7 @@ export class UsersController {
     return this.userService.getResetPassword(id, resetPasswordToken);
   }
 
+  @Public()
   @Post('reset-password')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
@@ -85,13 +91,15 @@ export class UsersController {
 
   // Google Auth
 
+  @Public()
   @Get('auth/google')
   @UseGuards(PassportAuthGuard('google'))
   public googleAuth() {}
 
+  @Public()
   @Get('auth/google/callback')
   @UseGuards(PassportAuthGuard('google'))
-  public async googleCallback(@Req() req: any) {
+  public async googleCallback(@Req() req: { user: User }) {
     return this.userService.loginWithGoogle(req.user);
   }
 
@@ -99,17 +107,14 @@ export class UsersController {
 
   @Get('current-user')
   @SerializeOptions({ groups: ['self'] })
-  @UseGuards(AuthGuard)
-  @ApiSecurity('bearer')
+  @Auth()
   public getUser(@CurrentUser() payload: JwtPayloadType) {
     return this.userService.getCurrentUser(payload.id);
   }
 
   @Put()
   @SerializeOptions({ groups: ['self'] })
-  @Roles(UserType.ADMIN, UserType.USER)
-  @UseGuards(AuthRoleGuard)
-  @ApiSecurity('bearer')
+  @Auth()
   public updateUser(
     @CurrentUser() payload: JwtPayloadType,
     @Body() body: UpdateUserDto,
@@ -121,9 +126,8 @@ export class UsersController {
 
   @Post('profile-image')
   @SerializeOptions({ groups: ['self'] })
-  @UseGuards(AuthGuard)
-  @UseInterceptors(FileInterceptor('profile-image'))
-  @ApiSecurity('bearer')
+  @Auth()
+  @UseInterceptors(FileInterceptor('profile-image', imageUploadOptions(2)))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: ImageUploadedDto, description: 'profile image' })
   public uploadProfileImage(
@@ -139,8 +143,7 @@ export class UsersController {
 
   @Delete('profile-image')
   @SerializeOptions({ groups: ['self'] })
-  @UseGuards(AuthGuard)
-  @ApiSecurity('bearer')
+  @Auth()
   public deleteProfileImage(@CurrentUser() payload: JwtPayloadType) {
     return this.userService.removeProfileImage(payload.id);
   }
@@ -149,17 +152,13 @@ export class UsersController {
 
   @Get()
   @SerializeOptions({ groups: ['admin'] })
-  @Roles(UserType.ADMIN)
-  @UseGuards(AuthRoleGuard)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public getAllUser() {
     return this.userService.getAllUser();
   }
 
   @Delete(':id')
-  @Roles(UserType.ADMIN, UserType.USER)
-  @UseGuards(AuthRoleGuard)
-  @ApiSecurity('bearer')
+  @Auth()
   public deleteUser(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() payload: JwtPayloadType,

@@ -10,12 +10,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtPayloadType } from '../utils/types';
+import { JwtPayloadType } from '../common/types';
 import { UpdateUserDto } from './dtos/update-user.dto';
-import { UserType } from '../utils/enums';
+import { UserType } from '../common/enums';
 import { RegisterDto } from './dtos/register.dto';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
-import { CloudinaryService } from '../utils/cloudinary.service';
+import { CloudinaryService, deleteImageQuietly } from '../common/cloudinary';
 
 @Injectable()
 export class UserService {
@@ -160,7 +160,11 @@ export class UserService {
     await this.userRepository.remove(user);
 
     if (user.profileImagePublicId) {
-      await this.deleteImageSafely(user.profileImagePublicId);
+      await deleteImageQuietly(
+        this.cloudinaryService,
+        user.profileImagePublicId,
+        this.logger,
+      );
     }
 
     return {
@@ -192,12 +196,16 @@ export class UserService {
     try {
       saved = await this.userRepository.save(user);
     } catch (error) {
-      await this.deleteImageSafely(publicId);
+      await deleteImageQuietly(this.cloudinaryService, publicId, this.logger);
       throw error;
     }
 
     if (oldPublicId) {
-      await this.deleteImageSafely(oldPublicId);
+      await deleteImageQuietly(
+        this.cloudinaryService,
+        oldPublicId,
+        this.logger,
+      );
     }
 
     return saved;
@@ -221,15 +229,5 @@ export class UserService {
     user.profileImagePublicId = null;
 
     return this.userRepository.save(user);
-  }
-
-  private async deleteImageSafely(publicId: string) {
-    try {
-      await this.cloudinaryService.deleteImage(publicId);
-    } catch (error) {
-      this.logger.warn(
-        `Could not delete image ${publicId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 }

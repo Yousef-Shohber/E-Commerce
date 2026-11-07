@@ -11,17 +11,16 @@ import { Repository } from 'typeorm';
 import { RegisterDto } from './dtos/register.dto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { AccessTokenType, JwtPayloadType } from '../utils/types';
+import { AccessTokenType, JwtPayloadType } from '../common/types';
 import { randomBytes } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { ResetUserPasswordDto } from './dtos/reset-password.dto';
-import { pgErrorCode } from '../utils/db-errors';
-import { safeEqual } from '../utils/safe-equal';
+import { PG_ERROR, pgErrorCode } from '../common/utils';
+import { safeEqual } from '../common/utils';
 
-// Used so login takes the same time whether or not the email exists
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
-const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class AuthProvider {
@@ -56,23 +55,17 @@ export class AuthProvider {
     try {
       newUser = await this.userRepository.save(newUser);
     } catch (error) {
-      // two requests with the same email at the same time
-      if (pgErrorCode(error) === '23505') {
+      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
         throw new BadRequestException('User Already Exist');
       }
       throw error;
     }
 
-    const link = this.generateVerifyLink(
-      newUser.id,
-      newUser.verificationToken!,
-    );
+    const link = this.generateVerifyLink(newUser.id, newUser.verificationToken);
 
     try {
       await this.mailService.sendVerificationToken(newUser.email, link);
     } catch (error) {
-      // Partial failure: user saved but the email failed. Remove the user so
-      // the person can simply try to register again.
       await this.userRepository.delete(newUser.id);
       throw error;
     }
@@ -175,10 +168,7 @@ export class AuthProvider {
 
       try {
         await this.mailService.sendResetPassword(email, link);
-      } catch {
-        // already logged by MailService; the response stays the same so we
-        // don't reveal whether the email exists
-      }
+      } catch {}
     }
 
     return {
@@ -283,9 +273,6 @@ export class AuthProvider {
       user.googleId = data.googleId;
 
       if (!user.isAccountVerified) {
-        // Someone may have registered this email with a password they chose
-        // before the real owner signed in with Google. Google proves the
-        // email is theirs, so we drop the old password and tokens.
         user.isAccountVerified = true;
         user.password = null;
         user.verificationToken = null;
@@ -306,8 +293,7 @@ export class AuthProvider {
     try {
       return await this.userRepository.save(user);
     } catch (error) {
-      // two Google logins at the same time created the same user
-      if (pgErrorCode(error) === '23505') {
+      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
         return this.userRepository.findOneOrFail({
           where: { googleId: data.googleId },
         });
