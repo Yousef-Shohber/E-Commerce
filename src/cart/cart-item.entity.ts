@@ -22,8 +22,16 @@ export class CartItem {
   @Column()
   userId: number;
 
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user: User;
+
   @Column()
   productId: number;
+
+  @ManyToOne(() => Product, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'productId' })
+  product: Product;
 
   @Column({ type: 'int' })
   quantity: number;
@@ -33,12 +41,4 @@ export class CartItem {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
-
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
-  user: User;
-
-  @ManyToOne(() => Product, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'productId' })
-  product: Product;
 }

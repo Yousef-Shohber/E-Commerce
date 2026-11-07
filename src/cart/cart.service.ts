@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CartItem } from './cart-item.entity';
 import { AddToCartDto } from './dtos/add-to-cart.dto';
-import { pgErrorCode } from '../utils/db-errors';
+import { PG_ERROR, pgErrorCode, fromCents, toCents } from '../common/utils';
 
 @Injectable()
 export class CartService {
@@ -40,7 +40,7 @@ export class CartService {
     let totalCents = 0;
 
     const items = rows.map((row) => {
-      const unitCents = Math.round(row.product.price * 100);
+      const unitCents = toCents(row.product.price);
       totalCents += unitCents * row.quantity;
 
       return {
@@ -50,11 +50,11 @@ export class CartService {
         price: row.product.price,
         stock: row.product.stock,
         quantity: row.quantity,
-        subtotal: (unitCents * row.quantity) / 100,
+        subtotal: fromCents(unitCents * row.quantity),
       };
     });
 
-    return { items, total: totalCents / 100 };
+    return { items, total: fromCents(totalCents) };
   }
 
   /**
@@ -67,22 +67,22 @@ export class CartService {
     try {
       // one atomic statement, so two parallel requests can't lose an update
       await this.cartRepository.query(
-        `INSERT INTO cart_items ("userId", "productId", "quantity")
-         VALUES ($1, $2, $3)
-         ON CONFLICT ("userId", "productId")
-         DO UPDATE SET "quantity" = cart_items."quantity" + EXCLUDED."quantity",
-                       "updatedAt" = now()`,
+        ` INSERT INTO cart_items ("userId", "productId", "quantity")
+          VALUES ($1, $2, $3)
+          ON CONFLICT ("userId", "productId")
+          DO UPDATE SET "quantity" = cart_items."quantity" + EXCLUDED."quantity",
+                        "updatedAt" = now()`,
         [userId, dto.productId, dto.quantity],
       );
     } catch (error) {
       const code = pgErrorCode(error);
 
-      if (code === '23503') {
+      if (code === PG_ERROR.FOREIGN_KEY_VIOLATION) {
         throw new NotFoundException(
           `Product with id ${dto.productId} not found`,
         );
       }
-      if (code === '23514') {
+      if (code === PG_ERROR.CHECK_VIOLATION) {
         throw new BadRequestException('Maximum quantity per product is 99');
       }
       throw error;
