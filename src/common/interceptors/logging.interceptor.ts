@@ -25,7 +25,7 @@ export class LoggingInterceptor implements NestInterceptor {
 
     const log = (status: number) => {
       const route = (request.route as { path?: string } | undefined)?.path;
-      const line = `${request.method} ${route ?? request.path} ${status} ${Date.now() - startedAt}ms`;
+      const line = `${request.method} ${route ?? request.path} ${status} +${Date.now() - startedAt}ms`;
 
       if (status >= 500) this.logger.error(line);
       else if (status >= 400) this.logger.warn(line);
