@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { PaginationQueryDto } from '../../utils/pagination.dto';
-import { OrderStatus } from '../../utils/enums';
+import { PaginationQueryDto } from '../../common/pagination';
+import { OrderStatus } from '../../common/enums';
 
 export class OrdersQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: OrderStatus })

@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Product } from '../products/products.entity';
-import { NumericTransformer } from '../utils/numeric.transformer';
+import { NumericTransformer } from '../common/transformers';
 import { Order } from './orders.entity';
 
 @Entity({ name: 'order_items' })
@@ -23,7 +23,6 @@ export class OrderItem {
   @Column({ type: 'int', nullable: true })
   productId: number | null;
 
-  // Snapshot of the product at purchase time
   @Column({ type: 'varchar', length: 150 })
   productTitle: string;
 

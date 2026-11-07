@@ -1,19 +1,14 @@
-import { JwtModule } from '@nestjs/jwt';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { OrdersController } from './orders.controller';
-import { OrdersService } from './orders.service';
-import { Order } from './orders.entity';
+import { CouponsModule } from '../coupons/coupons.module';
 import { OrderItem } from './order-item.entity';
-import { UsersModule } from '../users/users.module';
+import { OrdersController } from './orders.controller';
+import { Order } from './orders.entity';
+import { OrdersService } from './orders.service';
 
 @Module({
   controllers: [OrdersController],
   providers: [OrdersService],
-  imports: [
-    UsersModule,
-    JwtModule,
-    TypeOrmModule.forFeature([Order, OrderItem]),
-  ],
+  imports: [TypeOrmModule.forFeature([Order, OrderItem]), CouponsModule],
 })
 export class OrdersModule {}

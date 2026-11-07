@@ -11,9 +11,11 @@ import { Order } from './orders.entity';
 import { OrderItem } from './order-item.entity';
 import { CheckoutDto } from './dtos/checkout.dto';
 import { AdminOrdersQueryDto, OrdersQueryDto } from './dtos/orders-query.dto';
-import { OrderStatus, UserType } from '../utils/enums';
-import { rowsOf } from '../utils/db-errors';
-import { JwtPayloadType } from '../utils/types';
+import { OrderStatus, UserType } from '../common/enums';
+import { Paginated, resolvePagination } from '../common/pagination';
+import { fromCents, rowsOf, toCents } from '../common/utils';
+import { JwtPayloadType } from '../common/types';
+import { CouponsService } from '../coupons/coupons.service';
 
 /**
  * Allowed status changes:
@@ -33,6 +35,7 @@ export class OrdersService {
     @InjectRepository(Order)
     private readonly ordersRepository: Repository<Order>,
     private readonly dataSource: DataSource,
+    private readonly couponsService: CouponsService,
   ) {}
 
   /**
@@ -71,9 +74,9 @@ export class OrdersService {
       for (const row of cart) {
         const updated = rowsOf<{ id: number; title: string; price: number }>(
           await manager.query(
-            `UPDATE products SET "stock" = "stock" - $1, "updatedAt" = now()
-             WHERE "id" = $2 AND "stock" >= $1
-             RETURNING "id", "title", "price"`,
+            ` UPDATE products SET "stock" = "stock" - $1, "updatedAt" = now()
+              WHERE "id" = $2 AND "stock" >= $1
+              RETURNING "id", "title", "price"`,
             [row.quantity, row.productId],
           ),
         );
@@ -99,21 +102,40 @@ export class OrdersService {
         lines.push({
           productId: updated[0].id,
           title: updated[0].title,
-          priceCents: Math.round(updated[0].price * 100),
+          priceCents: toCents(updated[0].price),
           quantity: row.quantity,
         });
       }
 
-      const totalCents = lines.reduce(
+      const subtotalCents = lines.reduce(
         (sum, line) => sum + line.priceCents * line.quantity,
         0,
       );
+
+      // The coupon is used after the stock (products are always locked before
+      // coupons, here and in cancel, so the two can never deadlock).
+      let discountCents = 0;
+      let coupon: { id: number; code: string } | null = null;
+
+      if (dto.couponCode) {
+        const redeemed = await this.couponsService.redeem(
+          manager,
+          dto.couponCode,
+          subtotalCents,
+        );
+        discountCents = redeemed.discountCents;
+        coupon = { id: redeemed.id, code: redeemed.code };
+      }
 
       const order = await manager.save(
         manager.create(Order, {
           userId,
           status: OrderStatus.PENDING,
-          totalPrice: totalCents / 100,
+          subtotal: fromCents(subtotalCents),
+          discountAmount: fromCents(discountCents),
+          totalPrice: fromCents(subtotalCents - discountCents),
+          couponId: coupon?.id ?? null,
+          couponCode: coupon?.code ?? null,
           shippingAddress: dto.shippingAddress,
         }),
       );
@@ -124,7 +146,7 @@ export class OrdersService {
             orderId: order.id,
             productId: line.productId,
             productTitle: line.title,
-            unitPrice: line.priceCents / 100,
+            unitPrice: fromCents(line.priceCents),
             quantity: line.quantity,
           }),
         ),
@@ -227,19 +249,29 @@ export class OrdersService {
 
     const items = rowsOf<{ productId: number; quantity: number }>(
       await manager.query(
-        `SELECT "productId", "quantity" FROM order_items
-         WHERE "orderId" = $1 AND "productId" IS NOT NULL
-         ORDER BY "productId"`,
+        ` SELECT "productId", "quantity" FROM order_items
+          WHERE "orderId" = $1 AND "productId" IS NOT NULL
+          ORDER BY "productId"`,
         [id],
       ),
     );
 
     for (const item of items) {
       await manager.query(
-        `UPDATE products SET "stock" = "stock" + $1, "updatedAt" = now()
-         WHERE "id" = $2`,
+        ` UPDATE products SET "stock" = "stock" + $1, "updatedAt" = now()
+          WHERE "id" = $2`,
         [item.quantity, item.productId],
       );
+    }
+
+    // the coupon use goes back too (after the products: same lock order as checkout)
+    const [{ couponId }] = rowsOf<{ couponId: number | null }>(
+      await manager.query(`SELECT "couponId" FROM orders WHERE "id" = $1`, [
+        id,
+      ]),
+    );
+    if (couponId) {
+      await this.couponsService.release(manager, couponId);
     }
 
     return manager.findOneOrFail(Order, { where: { id } });
@@ -249,8 +281,7 @@ export class OrdersService {
     filter: { userId?: number; status?: OrderStatus },
     query: OrdersQueryDto,
   ) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
+    const { skip, take } = resolvePagination(query);
 
     const [items, total] = await this.ordersRepository.findAndCount({
       where: {
@@ -258,11 +289,11 @@ export class OrdersService {
         ...(filter.status ? { status: filter.status } : {}),
       },
       order: { createdAt: 'DESC', id: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip,
+      take,
     });
 
-    return { items, total };
+    return Paginated.of(items, total, query);
   }
 
   private async findOrFail(id: number) {
@@ -276,10 +307,7 @@ export class OrdersService {
   }
 
   private assertOwnerOrAdmin(order: Order, payload: JwtPayloadType) {
-    if (
-      order.userId !== payload.id &&
-      (payload.userType as UserType) !== UserType.ADMIN
-    ) {
+    if (order.userId !== payload.id && payload.userType !== UserType.ADMIN) {
       throw new ForbiddenException('Access Denied, You Are Not Allowed');
     }
   }

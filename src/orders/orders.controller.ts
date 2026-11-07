@@ -9,29 +9,23 @@ import {
   Patch,
   Post,
   Query,
-  Res,
-  UseGuards,
 } from '@nestjs/common';
-import { ApiSecurity } from '@nestjs/swagger';
-import type { Response } from 'express';
-import { OrdersService } from './orders.service';
+import { ApiTags } from '@nestjs/swagger';
+import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
+import { UserType } from '../common/enums';
+import type { JwtPayloadType } from '../common/types';
 import { CheckoutDto } from './dtos/checkout.dto';
-import { UpdateOrderStatusDto } from './dtos/update-order-status.dto';
 import { AdminOrdersQueryDto, OrdersQueryDto } from './dtos/orders-query.dto';
-import { CurrentUser } from '../users/decorators/current-user.decorator';
-import { Roles } from '../users/decorators/user-role.decorator';
-import { AuthRoleGuard } from '../users/guards/auth-role.guard';
-import { UserType } from '../utils/enums';
-import type { JwtPayloadType } from '../utils/types';
+import { UpdateOrderStatusDto } from './dtos/update-order-status.dto';
+import { OrdersService } from './orders.service';
 
-@Controller('/api/orders')
-@UseGuards(AuthRoleGuard)
-@Roles(UserType.USER, UserType.ADMIN)
-@ApiSecurity('bearer')
+@ApiTags('Orders')
+@Controller('orders')
+@Auth()
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
-  // Checkout: creates an order from the cart
+  // Checkout: creates an order from the cart (optionally with a coupon)
   @Post()
   public checkout(
     @CurrentUser() payload: JwtPayloadType,
@@ -41,28 +35,19 @@ export class OrdersController {
   }
 
   @Get('/me')
-  public async getMyOrders(
+  @ApiPaginated('My orders, newest first')
+  public getMyOrders(
     @CurrentUser() payload: JwtPayloadType,
     @Query() query: OrdersQueryDto,
-    @Res({ passthrough: true }) res: Response,
   ) {
-    const { items, total } = await this.ordersService.getMyOrders(
-      payload.id,
-      query,
-    );
-    res.setHeader('X-Total-Count', String(total));
-    return items;
+    return this.ordersService.getMyOrders(payload.id, query);
   }
 
   @Get()
-  @Roles(UserType.ADMIN)
-  public async getAllOrders(
-    @Query() query: AdminOrdersQueryDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { items, total } = await this.ordersService.getAllOrders(query);
-    res.setHeader('X-Total-Count', String(total));
-    return items;
+  @Auth(UserType.ADMIN)
+  @ApiPaginated('All orders, newest first')
+  public getAllOrders(@Query() query: AdminOrdersQueryDto) {
+    return this.ordersService.getAllOrders(query);
   }
 
   @Get('/:id')
@@ -83,7 +68,7 @@ export class OrdersController {
   }
 
   @Patch('/:id/status')
-  @Roles(UserType.ADMIN)
+  @Auth(UserType.ADMIN)
   public updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateOrderStatusDto,
