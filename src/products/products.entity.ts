@@ -11,6 +11,7 @@ import {
 import { User } from '../users/users.entity';
 import { Review } from '../reviews/reviews.entity';
 import { Category } from '../categories/categories.entity';
+import { ProductImage } from './product-image.entity';
 
 @Entity({ name: 'products' })
 @Check('"stock" >= 0')
@@ -36,8 +37,11 @@ export class Product {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  @OneToMany(() => Review, (review) => review.product, { eager: true })
+  @OneToMany(() => Review, (review) => review.product)
   reviews: Review[];
+
+  @OneToMany(() => ProductImage, (image) => image.product, { eager: true })
+  images: ProductImage[];
 
   @ManyToOne(() => User, (user) => user.product, {
     eager: true,
@@ -51,4 +55,8 @@ export class Product {
     onDelete: 'SET NULL',
   })
   category: Category | null;
+
+  // Not columns: calculated from the reviews table when products are read
+  ratingAverage?: number;
+  reviewsCount?: number;
 }

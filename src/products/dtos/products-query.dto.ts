@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PaginationQueryDto } from '../../utils/pagination.dto';
+import { PaginationQueryDto } from '../../common/pagination';
 
 export class ProductsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ example: 'laptop' })

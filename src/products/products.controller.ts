@@ -1,74 +1,94 @@
-import type { JwtPayloadType } from './../utils/types';
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
-  Put,
+  Controller,
   Delete,
+  Get,
+  Param,
   ParseIntPipe,
-  UseGuards,
+  Post,
+  Put,
   Query,
-  Res,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
+import { UserType } from '../common/enums';
+import type { JwtPayloadType } from '../common/types';
+import { imageUploadOptions } from '../common/upload';
 import { CreateProductDto } from './dtos/create-product.dto';
-import { UpdateProductDto } from './dtos/update-product.dbo';
 import { ProductsQueryDto } from './dtos/products-query.dto';
+import { UpdateProductDto } from './dtos/update-product.dto';
+import { UploadProductImagesDto } from './dtos/upload-product-images.dto';
+import { ProductImagesService } from './product-images.service';
 import { ProductsService } from './products.service';
-import { Roles } from '../users/decorators/user-role.decorator';
-import { UserType } from '../utils/enums';
-import { AuthRoleGuard } from '../users/guards/auth-role.guard';
-import { CurrentUser } from '../users/decorators/current-user.decorator';
-import { ApiSecurity } from '@nestjs/swagger';
 
-@Controller('/api/products')
+@ApiTags('Products')
+@Controller('products')
 export class ProductsController {
-  constructor(private readonly ProductsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly productImagesService: ProductImagesService,
+  ) {}
 
   @Post()
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public addProduct(
     @CurrentUser() payload: JwtPayloadType,
     @Body() product: CreateProductDto,
   ) {
-    return this.ProductsService.CreateProduct(payload.id, product);
+    return this.productsService.CreateProduct(payload.id, product);
   }
 
+  @Public()
   @Get()
-  public async getProducts(
-    @Query() query: ProductsQueryDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { items, total } = await this.ProductsService.getAll(query);
-    res.setHeader('X-Total-Count', String(total));
-    return items;
+  @ApiPaginated('A page of products')
+  public getProducts(@Query() query: ProductsQueryDto) {
+    return this.productsService.getAll(query);
   }
 
+  @Public()
   @Get('/:id')
   public getProductById(@Param('id', ParseIntPipe) id: number) {
-    return this.ProductsService.getOneBy(id);
+    return this.productsService.getOneBy(id);
   }
 
   @Put('/:id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public updateProduct(
     @Param('id', ParseIntPipe) id: number,
     @Body() product: UpdateProductDto,
   ) {
-    return this.ProductsService.update(id, product);
+    return this.productsService.update(id, product);
   }
 
   @Delete('/:id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public deleteProduct(@Param('id', ParseIntPipe) id: number) {
-    return this.ProductsService.delete(id);
+    return this.productsService.delete(id);
+  }
+
+  // Images
+
+  @Post('/:id/images')
+  @Auth(UserType.ADMIN)
+  @UseInterceptors(FilesInterceptor('images', 5, imageUploadOptions(5)))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: UploadProductImagesDto })
+  public addImages(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.productImagesService.add(id, files);
+  }
+
+  @Delete('/:id/images/:imageId')
+  @Auth(UserType.ADMIN)
+  public deleteImage(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('imageId', ParseIntPipe) imageId: number,
+  ) {
+    return this.productImagesService.remove(id, imageId);
   }
 }

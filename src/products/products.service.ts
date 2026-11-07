@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateProductDto } from './dtos/create-product.dto';
-import { UpdateProductDto } from './dtos/update-product.dbo';
+import { UpdateProductDto } from './dtos/update-product.dto';
 import { ProductsQueryDto } from './dtos/products-query.dto';
 import {
   FindOperator,
@@ -18,6 +18,9 @@ import {
 import { Product } from './products.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Category } from '../categories/categories.entity';
+import { Paginated, resolvePagination } from '../common/pagination';
+import { escapeLike } from '../common/utils';
+import { ProductImagesService } from './product-images.service';
 
 @Injectable()
 export class ProductsService {
@@ -25,6 +28,7 @@ export class ProductsService {
     @InjectRepository(Product)
     private readonly productsRepository: Repository<Product>,
     private readonly userService: UserService,
+    private readonly productImagesService: ProductImagesService,
   ) {}
 
   /**
@@ -48,12 +52,11 @@ export class ProductsService {
 
   /**
    * Get All Product (filter, sort and paginate)
-   * @returns Products and the total number of matches
+   * @returns A page of products (with images and rating) and the total
    */
   public async getAll(query: ProductsQueryDto = {}) {
     const { title, minPrice, maxPrice, categoryId } = query;
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
+    const { skip, take } = resolvePagination(query);
 
     if (
       minPrice !== undefined &&
@@ -86,11 +89,11 @@ export class ProductsService {
         [query.sortBy ?? 'createdAt']: query.order ?? 'DESC',
         id: 'ASC',
       },
-      skip: (page - 1) * limit,
-      take: limit,
+      skip,
+      take,
     });
 
-    return { items, total };
+    return Paginated.of(await this.decorate(items), total, query);
   }
 
   /**
@@ -107,7 +110,8 @@ export class ProductsService {
       throw new NotFoundException(`Product with id ${id} not found`);
     }
 
-    return product;
+    const [decorated] = await this.decorate([product]);
+    return decorated;
   }
 
   /**
@@ -131,15 +135,54 @@ export class ProductsService {
   }
 
   /**
-   * Delete Product
+   * Delete Product (its images are removed from Cloudinary too)
    * @param id of Product
    * @returns Deleted Message
    */
   public async delete(id: number) {
     const product = await this.getOneBy(id);
+    const publicIds = (product.images ?? []).map((image) => image.publicId);
 
     await this.productsRepository.remove(product);
+    await this.productImagesService.discard(publicIds);
+
     return { message: 'Product Deleted Successfully' };
+  }
+
+  /**
+   * Add what is not stored in the products table:
+   *  - the images in their order (main image first),
+   *  - the average rating and the number of reviews, with ONE grouped query
+   *    for the whole page (not one query per product).
+   */
+  private async decorate(products: Product[]): Promise<Product[]> {
+    if (products.length === 0) return products;
+
+    const rows: {
+      productId: number;
+      reviewsCount: number;
+      ratingAverage: number;
+    }[] = await this.productsRepository.query(
+      `SELECT "productId",
+              COUNT(*)::int AS "reviewsCount",
+              ROUND(AVG("rating")::numeric, 2)::float AS "ratingAverage"
+          FROM reviews
+        WHERE "productId" = ANY($1)
+        GROUP BY "productId"`,
+      [products.map((product) => product.id)],
+    );
+    const byProduct = new Map(rows.map((row) => [row.productId, row]));
+
+    for (const product of products) {
+      const stats = byProduct.get(product.id);
+      product.ratingAverage = stats?.ratingAverage ?? 0;
+      product.reviewsCount = stats?.reviewsCount ?? 0;
+      product.images = [...(product.images ?? [])].sort(
+        (a, b) => a.position - b.position || a.id - b.id,
+      );
+    }
+
+    return products;
   }
 
   private async findCategory(
@@ -157,9 +200,4 @@ export class ProductsService {
 
     return category;
   }
-}
-
-/** Escape % and _ so they are searched as normal characters */
-function escapeLike(value: string) {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
