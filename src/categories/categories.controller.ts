@@ -7,42 +7,39 @@ import {
   ParseIntPipe,
   Post,
   Put,
-  UseGuards,
 } from '@nestjs/common';
-import { ApiSecurity } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
+import { Auth, Public } from '../common/decorators';
+import { UserType } from '../common/enums';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dtos/create-category.dto';
 import { UpdateCategoryDto } from './dtos/update-category.dto';
-import { Roles } from '../users/decorators/user-role.decorator';
-import { AuthRoleGuard } from '../users/guards/auth-role.guard';
-import { UserType } from '../utils/enums';
 
-@Controller('/api/categories')
+@ApiTags('Categories')
+@Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public addCategory(@Body() body: CreateCategoryDto) {
     return this.categoriesService.create(body);
   }
 
+  @Public()
   @Get()
   public getCategories() {
     return this.categoriesService.getAll();
   }
 
+  @Public()
   @Get('/:id')
   public getCategoryById(@Param('id', ParseIntPipe) id: number) {
     return this.categoriesService.getOneBy(id);
   }
 
   @Put('/:id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public updateCategory(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateCategoryDto,
@@ -51,9 +48,7 @@ export class CategoriesController {
   }
 
   @Delete('/:id')
-  @UseGuards(AuthRoleGuard)
-  @Roles(UserType.ADMIN)
-  @ApiSecurity('bearer')
+  @Auth(UserType.ADMIN)
   public deleteCategory(@Param('id', ParseIntPipe) id: number) {
     return this.categoriesService.delete(id);
   }

@@ -8,7 +8,7 @@ import { Repository } from 'typeorm';
 import { Category } from './categories.entity';
 import { CreateCategoryDto } from './dtos/create-category.dto';
 import { UpdateCategoryDto } from './dtos/update-category.dto';
-import { pgErrorCode } from '../utils/db-errors';
+import { PG_ERROR, pgErrorCode } from '../common/utils';
 
 @Injectable()
 export class CategoriesService {
@@ -85,7 +85,7 @@ export class CategoriesService {
     try {
       return await this.categoriesRepository.save(category);
     } catch (error) {
-      if (pgErrorCode(error) === '23505') {
+      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
         throw new ConflictException('Category name already exists');
       }
       throw error;
