@@ -1,16 +1,20 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
+import { Public } from './common/decorators';
 
+@Public()
+@ApiTags('Health')
 @Controller()
 export class AppController {
   constructor(private readonly dataSource: DataSource) {}
 
   @Get('/')
   public getHome() {
-    return 'Your App Is Working';
+    return 'E-Commerce API is running correctly. Please refer to the documentation for available endpoints.';
   }
 
-  @Get('/api/health')
+  @Get('health')
   public async health() {
     try {
       await this.dataSource.query('SELECT 1');

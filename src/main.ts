@@ -1,41 +1,15 @@
 import 'pg';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import helmet from 'helmet';
+import { configureApp } from './app.setup';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
-  app.enableShutdownHooks();
-  app.use(helmet({ contentSecurityPolicy: false }));
-
-  const swagger = new DocumentBuilder()
-    .setVersion('1.0')
-    .setTitle('Nest Js - Learning Api')
-    .setDescription('Learning Project')
-    .addServer(process.env.DOMAIN)
-    .addSecurity('bearer', { type: 'http', scheme: 'bearer' })
-    .addBearerAuth()
-    .build();
-  const documentation = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('swagger', app, documentation, {
-    customCssUrl:
-      'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css',
-    customJs: [
-      'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js',
-      'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js',
-    ],
-  });
-
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureApp(app);
   await app.listen(process.env.PORT ?? 3000);
+
+  Logger.log(`Swagger docs on ${process.env.DOMAIN}/swagger`, 'Bootstrap');
 }
-bootstrap();
+void bootstrap();
