@@ -30,3 +30,22 @@ Authorization: Bearer {{token}}
 ### Delete Product
 DELETE http://localhost:3000/api/products/6
 Authorization: Bearer {{token}}
+
+### (admin) Add images to a product (up to 5 files per request, 8 per product)
+POST http://localhost:3000/api/products/1/images
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=Boundary
+
+--Boundary
+Content-Disposition: form-data; name="images"; filename="photo.png"
+Content-Type: image/png
+
+< ./photo.png
+--Boundary--
+
+### (admin) Remove one image of a product
+DELETE http://localhost:3000/api/products/1/images/1
+Authorization: Bearer {{token}}
+
+### Reviews of a product (public, newest first, paginated)
+GET http://localhost:3000/api/products/1/reviews?page=1&limit=10
