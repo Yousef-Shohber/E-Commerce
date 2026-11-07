@@ -320,7 +320,7 @@ export class AuthProvider {
   private generateVerifyLink(userId: number, verificationToken: string) {
     return `${this.config.get<string>(
       'DOMAIN',
-    )}/api/users/verify-email/${userId}/${verificationToken}`;
+    )}/api/v1/users/verify-email/${userId}/${verificationToken}`;
   }
 
   private generateResetPasswordLink(
@@ -329,6 +329,6 @@ export class AuthProvider {
   ) {
     return `${this.config.get<string>(
       'DOMAIN',
-    )}/api/users/reset-password/${userId}/${resetPasswordToken}`;
+    )}/api/v1/users/reset-password/${userId}/${resetPasswordToken}`;
   }
 }
