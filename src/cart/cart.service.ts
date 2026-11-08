@@ -1,13 +1,9 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CartItem } from './cart-item.entity';
 import { AddToCartDto } from './dtos/add-to-cart.dto';
-import { PG_ERROR, pgErrorCode, fromCents, toCents } from '../common/utils';
+import { fromCents, toCents } from '../common/utils';
 
 @Injectable()
 export class CartService {
@@ -64,29 +60,17 @@ export class CartService {
    * @returns The Updated Cart
    */
   public async addItem(userId: number, dto: AddToCartDto) {
-    try {
-      // one atomic statement, so two parallel requests can't lose an update
-      await this.cartRepository.query(
-        ` INSERT INTO cart_items ("userId", "productId", "quantity")
-          VALUES ($1, $2, $3)
-          ON CONFLICT ("userId", "productId")
-          DO UPDATE SET "quantity" = cart_items."quantity" + EXCLUDED."quantity",
-                        "updatedAt" = now()`,
-        [userId, dto.productId, dto.quantity],
-      );
-    } catch (error) {
-      const code = pgErrorCode(error);
-
-      if (code === PG_ERROR.FOREIGN_KEY_VIOLATION) {
-        throw new NotFoundException(
-          `Product with id ${dto.productId} not found`,
-        );
-      }
-      if (code === PG_ERROR.CHECK_VIOLATION) {
-        throw new BadRequestException('Maximum quantity per product is 99');
-      }
-      throw error;
-    }
+    // one atomic statement, so two parallel requests can't lose an update.
+    // A product that does not exist (foreign key) or a quantity over 99
+    // (check) is rejected by the database and answered by the exceptions filter
+    await this.cartRepository.query(
+      ` INSERT INTO cart_items ("userId", "productId", "quantity")
+        VALUES ($1, $2, $3)
+        ON CONFLICT ("userId", "productId")
+        DO UPDATE SET "quantity" = cart_items."quantity" + EXCLUDED."quantity",
+                      "updatedAt" = now()`,
+      [userId, dto.productId, dto.quantity],
+    );
 
     return this.getCart(userId);
   }
