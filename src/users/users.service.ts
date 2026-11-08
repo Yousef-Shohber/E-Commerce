@@ -1,6 +1,3 @@
-import { AuthProvider } from './auth.provider';
-import { LoginDto } from './dtos/login.dto';
-import { User } from './users.entity';
 import {
   BadRequestException,
   ForbiddenException,
@@ -10,152 +7,176 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtPayloadType } from '../common/types';
-import { UpdateUserDto } from './dtos/update-user.dto';
-import { UserType } from '../common/enums';
-import { RegisterDto } from './dtos/register.dto';
-import { ResetUserPasswordDto } from './dtos/reset-password.dto';
 import { CloudinaryService, deleteImageQuietly } from '../common/cloudinary';
+import { UserType } from '../common/enums';
+import { ErrorCode } from '../common/errors';
+import { UpdateUserDto } from './dtos/update-user.dto';
+import { User } from './users.entity';
+
+export interface CreateUserData {
+  email: string;
+  username?: string;
+  password: string;
+}
+
+export interface GoogleUserData {
+  googleId: string;
+  email: string;
+  username: string;
+}
 
 @Injectable()
-export class UserService {
-  private readonly logger = new Logger(UserService.name);
+export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly authProvider: AuthProvider,
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  // Authentication
+  // Lookups
 
   /**
-   * Create New User
-   * @param dto Data From Register
-   * @returns Verification Message
-   */
-  public async register(dto: RegisterDto) {
-    return this.authProvider.register(dto);
-  }
-
-  /**
-   * Log In User
-   * @param dto Data From Login
-   * @returns JWT Access Token or Verification Message
-   */
-  public async login(dto: LoginDto) {
-    return this.authProvider.login(dto);
-  }
-
-  // Email Verification
-
-  /**
-   * Verify User Email
-   * @param userId User ID From Link
-   * @param verificationToken Verification Token From Link
-   * @returns Verification Message
-   */
-  public async verifyEmail(userId: number, verificationToken: string) {
-    return this.authProvider.verifyEmail(userId, verificationToken);
-  }
-
-  // Password Reset
-
-  /**
-   * Send Reset Password Link
-   * @param email User Email
-   * @returns Reset Password Message
-   */
-  public async sendResetPassword(email: string) {
-    return this.authProvider.sendResetPasswordLink(email);
-  }
-
-  /**
-   * Validate Reset Password Link
-   * @param userId User ID From Link
-   * @param resetPasswordToken Reset Password Token From Link
-   * @returns Validation Message
-   */
-  public async getResetPassword(userId: number, resetPasswordToken: string) {
-    return this.authProvider.getResetPasswordLink(userId, resetPasswordToken);
-  }
-
-  /**
-   * Reset User Password
-   * @param dto Data From Reset Password
-   * @returns Reset Password Message
-   */
-  public async resetPassword(dto: ResetUserPasswordDto) {
-    return this.authProvider.resetPassword(dto);
-  }
-
-  /**
-   * Login With Google
-   * @param user User From Google Profile
-   * @returns JWT Access Token
-   */
-  public async loginWithGoogle(user: User) {
-    return this.authProvider.loginWithGoogle(user);
-  }
-
-  // User
-
-  /**
-   * Get Current User
    * @param id User ID
-   * @returns User
+   * @returns The user, or `null` if there is no such user
    */
-  public async getCurrentUser(id: number): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id },
-    });
+  public findById(id: number): Promise<User | null> {
+    return this.userRepository.findOneBy({ id });
+  }
+
+  /**
+   * @param id User ID
+   * @returns The user
+   * @throws NotFoundException If there is no such user
+   */
+  public async getById(id: number): Promise<User> {
+    const user = await this.findById(id);
 
     if (!user) {
-      throw new NotFoundException(`User With id ${id} Not Found`);
+      throw new NotFoundException({
+        code: ErrorCode.USER_NOT_FOUND,
+        message: `User with id ${id} not found`,
+      });
     }
 
     return user;
   }
 
-  /**
-   * Get All Users
-   * @returns All Users
-   */
-  public async getAllUser(): Promise<User[]> {
-    return this.userRepository.find();
+  public findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOneBy({ email });
+  }
+
+  public findByGoogleId(googleId: string): Promise<User | null> {
+    return this.userRepository.findOneBy({ googleId });
   }
 
   /**
+   * The password hash is `select: false`, so the places that need it (login,
+   * change password) ask for it explicitly, and nothing else does.
+   * @returns The user's id, password hash (`null` for Google-only accounts)
+   * and verification state, or `null` if the email is not registered
+   */
+  public findCredentialsByEmail(
+    email: string,
+  ): Promise<Pick<User, 'id' | 'password' | 'isAccountVerified'> | null> {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .select(['user.id', 'user.password', 'user.isAccountVerified'])
+      .where('user.email = :email', { email })
+      .getOne();
+  }
+
+  public findCredentialsById(
+    id: number,
+  ): Promise<Pick<User, 'id' | 'password'> | null> {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .select(['user.id', 'user.password'])
+      .where('user.id = :id', { id })
+      .getOne();
+  }
+
+  /**
+   * Get All Users (Admin)
+   */
+  public getAllUser(): Promise<User[]> {
+    return this.userRepository.find();
+  }
+
+  // Account creation (used by the auth module)
+
+  /**
+   * Create a user with a password. The email must be verified afterwards.
+   * @param data Email, optional username and the password HASH
+   */
+  public create(data: CreateUserData): Promise<User> {
+    return this.userRepository.save(this.userRepository.create(data));
+  }
+
+  /**
+   * Create a user from a Google profile (Google verified the email already)
+   */
+  public createFromGoogle(data: GoogleUserData): Promise<User> {
+    return this.userRepository.save(
+      this.userRepository.create({ ...data, isAccountVerified: true }),
+    );
+  }
+
+  /**
+   * Link a Google account to an existing user.
+   * If the email was never verified, the person who owns the Google account
+   * is now the proven owner of the email, so the password someone set while
+   * registering with it is removed (it could belong to an impostor).
+   */
+  public async linkGoogleAccount(user: User, googleId: string): Promise<User> {
+    user.googleId = googleId;
+
+    if (!user.isAccountVerified) {
+      user.isAccountVerified = true;
+      user.password = null;
+    }
+
+    return this.userRepository.save(user);
+  }
+
+  public async makeEmailVerified(id: number): Promise<void> {
+    await this.userRepository.update({ id }, { isAccountVerified: true });
+  }
+
+  public async updatePassword(id: number, passwordHash: string): Promise<void> {
+    await this.userRepository.update({ id }, { password: passwordHash });
+  }
+
+  // User
+
+  /**
    * Update User
-   * @param id User ID From Payload
+   * @param user The logged in user
    * @param dto Data From Update User
    * @returns Updated User
    */
-  public async updateUser(id: number, dto: UpdateUserDto): Promise<User> {
-    const user = await this.getCurrentUser(id);
-
+  public async updateUser(user: User, dto: UpdateUserDto): Promise<User> {
     user.username = dto.username ?? user.username;
-
-    if (dto.password) {
-      user.password = await this.authProvider.hashPassword(dto.password);
-    }
 
     return this.userRepository.save(user);
   }
 
   /**
    * Delete User
-   * @param userId User ID
-   * @param payload Current User Payload
+   * @param userId User to delete
+   * @param actor The logged in user (the same user, or an admin)
    * @returns Delete Message
    */
-  public async deleteUser(userId: number, payload: JwtPayloadType) {
-    if (userId !== payload.id && payload.userType !== UserType.ADMIN) {
-      throw new ForbiddenException('Access Denied, You Are Not Allowed');
+  public async deleteUser(userId: number, actor: User) {
+    if (userId !== actor.id && actor.userType !== UserType.ADMIN) {
+      throw new ForbiddenException({
+        code: ErrorCode.FORBIDDEN,
+        message: 'Access Denied, You Are Not Allowed',
+      });
     }
 
-    const user = await this.getCurrentUser(userId);
+    const user = await this.getById(userId);
 
     await this.userRepository.remove(user);
 
@@ -176,15 +197,14 @@ export class UserService {
 
   /**
    * Upload Profile Image
-   * @param userId User ID From Payload
+   * @param user The logged in user
    * @param file Profile Image
    * @returns Updated User
    */
   public async uploadProfileImage(
-    userId: number,
+    user: User,
     file: Express.Multer.File,
   ): Promise<User> {
-    const user = await this.getCurrentUser(userId);
     const oldPublicId = user.profileImagePublicId;
 
     const { url, publicId } = await this.cloudinaryService.uploadImage(file);
@@ -213,14 +233,15 @@ export class UserService {
 
   /**
    * Remove Profile Image
-   * @param userId User ID From Payload
+   * @param user The logged in user
    * @returns Updated User
    */
-  public async removeProfileImage(userId: number): Promise<User> {
-    const user = await this.getCurrentUser(userId);
-
+  public async removeProfileImage(user: User): Promise<User> {
     if (!user.profileImagePublicId) {
-      throw new BadRequestException('No Profile Image Found');
+      throw new BadRequestException({
+        code: ErrorCode.NO_PROFILE_IMAGE,
+        message: 'No Profile Image Found',
+      });
     }
 
     await this.cloudinaryService.deleteImage(user.profileImagePublicId);

@@ -24,7 +24,7 @@ export class User {
   email: string;
 
   @Exclude()
-  @Column({ type: 'varchar', nullable: true, default: null })
+  @Column({ type: 'varchar', nullable: true, default: null, select: false })
   password: string | null;
 
   @Exclude()
@@ -36,18 +36,6 @@ export class User {
 
   @Column({ default: false })
   isAccountVerified: boolean;
-
-  @Exclude()
-  @Column({ type: 'varchar', nullable: true, default: null })
-  verificationToken: string | null;
-
-  @Exclude()
-  @Column({ type: 'varchar', nullable: true, default: null })
-  resetPasswordToken: string | null;
-
-  @Exclude()
-  @Column({ type: 'timestamptz', nullable: true, default: null })
-  resetPasswordExpiresAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
