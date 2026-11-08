@@ -1,71 +1,67 @@
-import { plainToInstance } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUrl,
-  Matches,
-  validateSync,
-} from 'class-validator';
+import { z } from 'zod';
 
-const NUMBER = /^\d+$/;
+const port = z.coerce.number().int().min(1).max(65535);
+const duration = z
+  .string()
+  .regex(/^\d+[smhd]$/, 'use a format like 15m, 12h, 7d');
 
-class EnvironmentVariables {
-  // ---- required
-  @IsString()
-  @Matches(/^postgres(ql)?:\/\//, {
-    message: 'DATABASE_URL must start with postgres:// or postgresql://',
-  })
-  DATABASE_URL: string;
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .default('development'),
+  PORT: port.default(3000),
+  // Public URL of the API (Swagger server)
+  DOMAIN: z.url(),
+  CORS_ORIGINS: z.string().optional(),
+  // Number of reverse proxies in front of the app (0 = none)
+  TRUST_PROXY: z.coerce.number().int().min(0).optional(),
+  // Requests per minute per IP for the whole API
+  THROTTLE_LIMIT: z.coerce.number().int().min(1).default(100),
+  THROTTLE_DISABLED: z.stringbool().default(false),
 
-  @IsString() @IsNotEmpty() JWT_SECRET: string;
-  @IsString() @IsNotEmpty() JWT_EXPIRES_IN: string;
+  DATABASE_URL: z
+    .string()
+    .regex(
+      /^postgres(ql)?:\/\//,
+      'must start with postgres:// or postgresql://',
+    ),
 
-  @IsUrl({ require_tld: false }) DOMAIN: string;
+  REDIS_HOST: z.string().min(1),
+  REDIS_PORT: port.default(6379),
+  REDIS_PASSWORD: z.string().optional(),
 
-  @IsString() @IsNotEmpty() SMTP_HOST: string;
-  @Matches(NUMBER, { message: 'SMTP_PORT must be a number' }) SMTP_PORT: string;
-  @IsString() @IsNotEmpty() SMTP_USERNAME: string;
-  @IsString() @IsNotEmpty() SMTP_PASSWORD: string;
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_ACCESS_EXPIRES_IN: duration.default('1d'),
 
-  @IsString() @IsNotEmpty() GOOGLE_CLIENT_ID: string;
-  @IsString() @IsNotEmpty() GOOGLE_CLIENT_SECRET: string;
-  @IsUrl({ require_tld: false }) GOOGLE_CALLBACK_URL: string;
+  SMTP_HOST: z.string().min(1),
+  SMTP_PORT: port.default(587),
+  SMTP_USERNAME: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  // Falls back to SMTP_USERNAME when it is not set
+  MAIL_FROM: z.string().min(1).optional(),
+  // Secret used to hash the OTP codes stored in Redis
+  OTP_SECRET: z.string().min(32),
 
-  @IsString() @IsNotEmpty() CLOUDINARY_CLOUD_NAME: string;
-  @IsString() @IsNotEmpty() CLOUDINARY_API_KEY: string;
-  @IsString() @IsNotEmpty() CLOUDINARY_API_SECRET: string;
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
+  GOOGLE_CALLBACK_URL: z.url(),
 
-  // ---- optional
-  @IsOptional()
-  @Matches(NUMBER, { message: 'PORT must be a number' })
-  PORT?: string;
+  CLOUDINARY_CLOUD_NAME: z.string().min(1),
+  CLOUDINARY_API_KEY: z.string().min(1),
+  CLOUDINARY_API_SECRET: z.string().min(1),
+});
 
-  @IsOptional() @IsString() MAIL_FROM?: string;
+type Env = z.infer<typeof envSchema>;
 
-  @IsOptional()
-  @Matches(NUMBER, { message: 'THROTTLE_LIMIT must be a number' })
-  THROTTLE_LIMIT?: string;
+export function validateEnv(config: Record<string, unknown>): Env {
+  const result = envSchema.safeParse(config);
 
-  @IsOptional() @IsString() CORS_ORIGINS?: string;
-
-  @IsOptional()
-  @Matches(NUMBER, { message: 'TRUST_PROXY must be a number' })
-  TRUST_PROXY?: string;
-}
-
-export function validateEnv(config: Record<string, unknown>) {
-  const env = plainToInstance(EnvironmentVariables, config);
-  const errors = validateSync(env, { skipMissingProperties: false });
-
-  if (errors.length > 0) {
-    const problems = errors.flatMap((error) =>
-      Object.values(error.constraints ?? {}),
-    );
-    throw new Error(
-      `Invalid environment variables:\n - ${problems.join('\n - ')}`,
-    );
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join('\n');
+    throw new Error(`Invalid environment variables:\n${issues}`);
   }
 
-  return config;
+  return result.data;
 }

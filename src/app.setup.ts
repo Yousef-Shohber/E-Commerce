@@ -1,19 +1,22 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { PAGINATION_HEADERS } from './common/constants';
 
 export function configureApp(app: NestExpressApplication) {
+  const config = app.get(ConfigService);
+
   app.enableShutdownHooks();
   app.use(helmet({ contentSecurityPolicy: false }));
 
-  const proxies = Number(process.env.TRUST_PROXY);
-  if (Number.isInteger(proxies) && proxies > 0) {
+  const proxies = config.get<number>('TRUST_PROXY');
+  if (proxies) {
     app.set('trust proxy', proxies);
   }
 
-  const origins = (process.env.CORS_ORIGINS ?? '')
+  const origins = (config.get<string>('CORS_ORIGINS') ?? '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -22,19 +25,21 @@ export function configureApp(app: NestExpressApplication) {
 
   app.enableCors({
     origin:
-      origins.length > 0 ? origins : process.env.NODE_ENV !== 'production',
+      origins.length > 0
+        ? origins
+        : config.get<string>('NODE_ENV') !== 'production',
     exposedHeaders: Object.values(PAGINATION_HEADERS),
   });
 
-  setupSwagger(app);
+  setupSwagger(app, config.getOrThrow<string>('DOMAIN'));
 }
 
-function setupSwagger(app: INestApplication) {
+function setupSwagger(app: INestApplication, domain: string) {
   const swagger = new DocumentBuilder()
     .setVersion('1.0')
     .setTitle('Nest Js - Backend Api')
     .setDescription('E-Commerce Backend Project')
-    .addServer(process.env.DOMAIN)
+    .addServer(domain)
     .addSecurity('bearer', { type: 'http', scheme: 'bearer' })
     .addBearerAuth()
     .build();
