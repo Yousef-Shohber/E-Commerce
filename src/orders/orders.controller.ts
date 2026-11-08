@@ -13,7 +13,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { UserType } from '../common/enums';
-import type { JwtPayloadType } from '../common/types';
+import type { User } from '../users/users.entity';
 import { CheckoutDto } from './dtos/checkout.dto';
 import { AdminOrdersQueryDto, OrdersQueryDto } from './dtos/orders-query.dto';
 import { UpdateOrderStatusDto } from './dtos/update-order-status.dto';
@@ -27,20 +27,17 @@ export class OrdersController {
 
   // Checkout: creates an order from the cart (optionally with a coupon)
   @Post()
-  public checkout(
-    @CurrentUser() payload: JwtPayloadType,
-    @Body() body: CheckoutDto,
-  ) {
-    return this.ordersService.checkout(payload.id, body);
+  public checkout(@CurrentUser() user: User, @Body() body: CheckoutDto) {
+    return this.ordersService.checkout(user.id, body);
   }
 
   @Get('/me')
   @ApiPaginated('My orders, newest first')
   public getMyOrders(
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Query() query: OrdersQueryDto,
   ) {
-    return this.ordersService.getMyOrders(payload.id, query);
+    return this.ordersService.getMyOrders(user.id, query);
   }
 
   @Get()
@@ -53,18 +50,18 @@ export class OrdersController {
   @Get('/:id')
   public getOrderById(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
   ) {
-    return this.ordersService.getOneBy(id, payload);
+    return this.ordersService.getOneBy(id, user);
   }
 
   @Post('/:id/cancel')
   @HttpCode(HttpStatus.OK)
   public cancelOrder(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
   ) {
-    return this.ordersService.cancel(id, payload);
+    return this.ordersService.cancel(id, user);
   }
 
   @Patch('/:id/status')

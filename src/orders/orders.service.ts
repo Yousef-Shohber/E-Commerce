@@ -14,7 +14,7 @@ import { AdminOrdersQueryDto, OrdersQueryDto } from './dtos/orders-query.dto';
 import { OrderStatus, UserType } from '../common/enums';
 import { Paginated, resolvePagination } from '../common/pagination';
 import { fromCents, rowsOf, toCents } from '../common/utils';
-import { JwtPayloadType } from '../common/types';
+import { User } from '../users/users.entity';
 import { CouponsService } from '../coupons/coupons.service';
 
 /**
@@ -173,9 +173,9 @@ export class OrdersService {
   /**
    * Get Single Order (the owner or an admin)
    */
-  public async getOneBy(id: number, payload: JwtPayloadType) {
+  public async getOneBy(id: number, actor: User) {
     const order = await this.findOrFail(id);
-    this.assertOwnerOrAdmin(order, payload);
+    this.assertOwnerOrAdmin(order, actor);
     return order;
   }
 
@@ -184,9 +184,9 @@ export class OrdersService {
    * The status change is a compare-and-set, so cancelling twice (or from two
    * places at the same time) gives the stock back only once.
    */
-  public async cancel(id: number, payload: JwtPayloadType): Promise<Order> {
+  public async cancel(id: number, actor: User): Promise<Order> {
     const order = await this.findOrFail(id);
-    this.assertOwnerOrAdmin(order, payload);
+    this.assertOwnerOrAdmin(order, actor);
 
     return this.dataSource.transaction((manager) =>
       this.cancelInTransaction(manager, id),
@@ -306,8 +306,8 @@ export class OrdersService {
     return order;
   }
 
-  private assertOwnerOrAdmin(order: Order, payload: JwtPayloadType) {
-    if (order.userId !== payload.id && payload.userType !== UserType.ADMIN) {
+  private assertOwnerOrAdmin(order: Order, actor: User) {
+    if (order.userId !== actor.id && actor.userType !== UserType.ADMIN) {
       throw new ForbiddenException('Access Denied, You Are Not Allowed');
     }
   }
