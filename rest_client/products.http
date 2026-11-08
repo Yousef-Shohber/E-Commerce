@@ -1,14 +1,14 @@
-# Paste a token from POST /api/users/auth/login (never commit real tokens)
+# Paste a token from POST /api/v1/auth/login (never commit real tokens)
 @token = PASTE_YOUR_TOKEN_HERE
 
 ### Get All Products
-GET http://localhost:3000/api/products
+GET http://localhost:3000/api/v1/products
 
 ### Get Single Product by ID
-GET http://localhost:3000/api/products/16
+GET http://localhost:3000/api/v1/products/16
 
 ### Create new Product
-POST http://localhost:3000/api/products
+POST http://localhost:3000/api/v1/products
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -19,7 +19,7 @@ Content-Type: application/json
 }
 
 ### Update Product
-PUT http://localhost:3000/api/products/19
+PUT http://localhost:3000/api/v1/products/19
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
@@ -28,11 +28,11 @@ Authorization: Bearer {{token}}
 }
 
 ### Delete Product
-DELETE http://localhost:3000/api/products/6
+DELETE http://localhost:3000/api/v1/products/6
 Authorization: Bearer {{token}}
 
 ### (admin) Add images to a product (up to 5 files per request, 8 per product)
-POST http://localhost:3000/api/products/1/images
+POST http://localhost:3000/api/v1/products/1/images
 Authorization: Bearer {{token}}
 Content-Type: multipart/form-data; boundary=Boundary
 
@@ -43,9 +43,12 @@ Content-Type: image/png
 < ./photo.png
 --Boundary--
 
-### (admin) Remove one image of a product
-DELETE http://localhost:3000/api/products/1/images/1
+### (admin) Remove one image of a product (publicId comes from the product's images)
+DELETE http://localhost:3000/api/v1/products/1/images
+Content-Type: application/json
 Authorization: Bearer {{token}}
 
+{ "publicId": "products/PASTE_PUBLIC_ID" }
+
 ### Reviews of a product (public, newest first, paginated)
-GET http://localhost:3000/api/products/1/reviews?page=1&limit=10
+GET http://localhost:3000/api/v1/products/1/reviews?page=1&limit=10

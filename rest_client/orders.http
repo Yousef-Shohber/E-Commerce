@@ -2,30 +2,30 @@
 @token = PASTE_YOUR_TOKEN_HERE
 
 ### Checkout: turns the cart into an order
-POST http://localhost:3000/api/orders
+POST http://localhost:3000/api/v1/orders
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "shippingAddress": "12 Nile St, Mansoura, Egypt" }
 
 ### My orders (?status=pending&page=1&limit=10)
-GET http://localhost:3000/api/orders/me
+GET http://localhost:3000/api/v1/orders/me
 Authorization: Bearer {{token}}
 
 ### One order (owner or admin)
-GET http://localhost:3000/api/orders/1
+GET http://localhost:3000/api/v1/orders/1
 Authorization: Bearer {{token}}
 
 ### Cancel (owner or admin) - gives the stock back
-POST http://localhost:3000/api/orders/1/cancel
+POST http://localhost:3000/api/v1/orders/1/cancel
 Authorization: Bearer {{token}}
 
 ### All orders (admin) (?userId=1&status=paid)
-GET http://localhost:3000/api/orders
+GET http://localhost:3000/api/v1/orders
 Authorization: Bearer {{token}}
 
 ### Change the status (admin): pending -> paid -> shipped -> delivered
-PATCH http://localhost:3000/api/orders/1/status
+PATCH http://localhost:3000/api/v1/orders/1/status
 Authorization: Bearer {{token}}
 Content-Type: application/json
 

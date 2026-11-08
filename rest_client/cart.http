@@ -2,27 +2,27 @@
 @token = PASTE_YOUR_TOKEN_HERE
 
 ### My cart
-GET http://localhost:3000/api/cart
+GET http://localhost:3000/api/v1/cart
 Authorization: Bearer {{token}}
 
 ### Add a product (adds to the quantity if already in the cart)
-POST http://localhost:3000/api/cart
+POST http://localhost:3000/api/v1/cart
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "productId": 1, "quantity": 2 }
 
 ### Set the quantity
-PUT http://localhost:3000/api/cart/1
+PUT http://localhost:3000/api/v1/cart/1
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "quantity": 5 }
 
 ### Remove one product
-DELETE http://localhost:3000/api/cart/1
+DELETE http://localhost:3000/api/v1/cart/1
 Authorization: Bearer {{token}}
 
 ### Empty the cart
-DELETE http://localhost:3000/api/cart
+DELETE http://localhost:3000/api/v1/cart
 Authorization: Bearer {{token}}

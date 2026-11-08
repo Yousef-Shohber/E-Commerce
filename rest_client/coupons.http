@@ -1,9 +1,9 @@
-# Paste a token from POST /api/users/auth/login (never commit real tokens)
+# Paste a token from POST /api/v1/auth/login (never commit real tokens)
 @token = PASTE_YOUR_TOKEN_HERE
 @adminToken = PASTE_AN_ADMIN_TOKEN_HERE
 
 ### (customer) What would my cart cost with this code?
-POST http://localhost:3000/api/coupons/validate
+POST http://localhost:3000/api/v1/coupons/validate
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -12,7 +12,7 @@ Content-Type: application/json
 }
 
 ### (admin) Create a percentage coupon: 10% off, max 50 off, cart of at least 100, 100 uses
-POST http://localhost:3000/api/coupons
+POST http://localhost:3000/api/v1/coupons
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
@@ -27,7 +27,7 @@ Content-Type: application/json
 }
 
 ### (admin) Create a fixed coupon: 25 off
-POST http://localhost:3000/api/coupons
+POST http://localhost:3000/api/v1/coupons
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
@@ -38,11 +38,11 @@ Content-Type: application/json
 }
 
 ### (admin) List coupons
-GET http://localhost:3000/api/coupons?page=1&limit=10
+GET http://localhost:3000/api/v1/coupons?page=1&limit=10
 Authorization: Bearer {{adminToken}}
 
 ### (admin) Stop a coupon (the code itself cannot be changed)
-PATCH http://localhost:3000/api/coupons/1
+PATCH http://localhost:3000/api/v1/coupons/1
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
@@ -51,7 +51,7 @@ Content-Type: application/json
 }
 
 ### (admin) Remove the usage limit
-PATCH http://localhost:3000/api/coupons/1
+PATCH http://localhost:3000/api/v1/coupons/1
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
@@ -60,11 +60,11 @@ Content-Type: application/json
 }
 
 ### (admin) Delete a coupon (orders that used it keep the code and the discount)
-DELETE http://localhost:3000/api/coupons/1
+DELETE http://localhost:3000/api/v1/coupons/1
 Authorization: Bearer {{adminToken}}
 
 ### Checkout with a coupon
-POST http://localhost:3000/api/orders
+POST http://localhost:3000/api/v1/orders
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
