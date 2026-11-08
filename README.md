@@ -36,20 +36,20 @@ no double orders, no lost updates).
 
 ## Features
 
-| Area           | What you get                                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Auth**       | Register with email verification (SMTP), JWT login, forgot / reset password (link valid for 1 hour, single use), Google OAuth 2.0  |
-| **Users**      | Profile, update username / password, delete account (owner or admin), profile image on Cloudinary, roles `admin` / `user`          |
-| **Categories** | CRUD (admin only), unique names                                                                                                    |
-| **Products**   | CRUD (admin only), stock, category, case-insensitive search, price filters, sorting, pagination with an `X-Total-Count` header     |
-| **Images**     | Up to 8 images per product on **Cloudinary** (admin), kept in order; files are deleted from Cloudinary with the image / product    |
-| **Reviews**    | Rating 1–5 with a comment, **one review per user per product**; products show `ratingAverage` and `reviewsCount`; paginated list   |
-| **Wishlist**   | Save / remove products, paginated list, saving twice is harmless                                                                   |
-| **Coupons**    | Percentage or fixed coupons (admin), minimum cart, cap, validity dates, usage limit; the limit can never be passed concurrently    |
-| **Cart**       | Add / change / remove / clear; adding is a single atomic statement                                                                 |
-| **Orders**     | Checkout from the cart (with an optional coupon), cancel (stock and coupon use are returned), status flow, "my orders", admin list |
-| **Uploads**    | Image upload to disk (png, jpg, gif, webp, 5 MB, login required)                                                                   |
-| **Ops**        | `GET /api/health`, Swagger UI at `/swagger`, env validation, rate limiting, Helmet, CORS, one error format, access log             |
+| Area           | What you get                                                                                                                                       |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Auth**       | Register with email verification by a 6-digit **OTP** (SMTP + Redis), JWT login, forgot / reset password by OTP, change password, Google OAuth 2.0 |
+| **Users**      | Profile, update username, delete account (owner or admin), profile image on Cloudinary, roles `admin` / `user`                                     |
+| **Categories** | CRUD (admin only), unique names                                                                                                                    |
+| **Products**   | CRUD (admin only), stock, category, case-insensitive search, price filters, sorting, pagination with an `X-Total-Count` header                     |
+| **Images**     | Up to 8 images per product on **Cloudinary** (admin), kept in order; files are deleted from Cloudinary with the image / product                    |
+| **Reviews**    | Rating 1–5 with a comment, **one review per user per product**; products show `ratingAverage` and `reviewsCount`; paginated list                   |
+| **Wishlist**   | Save / remove products, paginated list, saving twice is harmless                                                                                   |
+| **Coupons**    | Percentage or fixed coupons (admin), minimum cart, cap, validity dates, usage limit; the limit can never be passed concurrently                    |
+| **Cart**       | Add / change / remove / clear; adding is a single atomic statement                                                                                 |
+| **Orders**     | Checkout from the cart (with an optional coupon), cancel (stock and coupon use are returned), status flow, "my orders", admin list                 |
+| **Uploads**    | Image upload to disk (png, jpg, gif, webp, 5 MB, login required)                                                                                   |
+| **Ops**        | `GET /api/health`, Swagger UI at `/swagger`, env validation, rate limiting, Helmet, CORS, one error format, access log                             |
 
 ## Tech stack
 
@@ -97,7 +97,7 @@ cp .env.example .env.development     # then fill in the values
 ```
 
 Which file is read: `NODE_ENV=production` → `.env`, anything else → `.env.<NODE_ENV>`
-(`.env.development` by default). A variable that is already set in the real environment
+(`.env.development` by default). **Redis** is required (it keeps the one-time codes). A variable that is already set in the real environment
 always wins over the file. The app refuses to start, with a clear message, if a required
 variable is missing.
 
@@ -138,12 +138,16 @@ request, so old tokens follow the change immediately).
 ### Try it
 
 ```bash
-# 1) register (a verification link is emailed), open the link, then log in
-curl -X POST localhost:3000/api/users/auth/register \
+# 1) register (a 6-digit code is emailed), verify it, then log in
+curl -X POST localhost:3000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"sara@example.com","password":"secret123","username":"Sara"}'
 
-curl -X POST localhost:3000/api/users/auth/login \
+curl -X POST localhost:3000/api/v1/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"sara@example.com","otp":"048213"}'
+
+curl -X POST localhost:3000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"sara@example.com","password":"secret123"}'
 # -> { "accessToken": "eyJ..." }
@@ -169,27 +173,34 @@ Ready-made requests for every endpoint are in [`rest_client/*.http`](rest_client
 
 All variables below are **required** unless marked optional.
 
-| Variable                | Example                                                | Notes                                                                                                                   |
-| ----------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`          | `postgres://user:password@localhost:5432/nest_shop`    | Add `?sslmode=require` for hosted databases such as Neon                                                                |
-| `DOMAIN`                | `http://localhost:3000`                                | Public URL of the API; used in e-mail links and as the Swagger server                                                   |
-| `JWT_SECRET`            | 96 random hex characters                               | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`                                              |
-| `JWT_EXPIRES_IN`        | `1d`                                                   | Any [`ms`](https://github.com/vercel/ms) value (`15m`, `7d`, ...)                                                       |
-| `SMTP_HOST`             | `sandbox.smtp.mailtrap.io`                             | STARTTLS is used (`secure: false`), so use port **587** or **2525**, not 465                                            |
-| `SMTP_PORT`             | `587`                                                  |                                                                                                                         |
-| `SMTP_USERNAME`         | `you@example.com`                                      | Also the default sender address                                                                                         |
-| `SMTP_PASSWORD`         | `...`                                                  |                                                                                                                         |
-| `GOOGLE_CLIENT_ID`      | `...apps.googleusercontent.com`                        | Google Cloud Console → Credentials → OAuth client                                                                       |
-| `GOOGLE_CLIENT_SECRET`  | `...`                                                  |                                                                                                                         |
-| `GOOGLE_CALLBACK_URL`   | `http://localhost:3000/api/users/auth/google/callback` | Must be listed as an authorised redirect URI in Google Console                                                          |
-| `CLOUDINARY_CLOUD_NAME` | `...`                                                  | Used for profile images and product images                                                                              |
-| `CLOUDINARY_API_KEY`    | `...`                                                  |                                                                                                                         |
-| `CLOUDINARY_API_SECRET` | `...`                                                  |                                                                                                                         |
-| `PORT`                  | `3000`                                                 | _Optional._ Default `3000`                                                                                              |
-| `MAIL_FROM`             | `"Shop" <no-reply@example.com>`                        | _Optional._ Default `"Nest JS" <SMTP_USERNAME>`                                                                         |
-| `THROTTLE_LIMIT`        | `100`                                                  | _Optional._ Requests per minute per IP for the whole API                                                                |
-| `CORS_ORIGINS`          | `https://shop.example.com,https://admin.example.com`   | _Optional._ Front-end origins allowed by CORS. Unset: open in development, **closed in production**                     |
-| `TRUST_PROXY`           | `1`                                                    | _Optional._ Number of reverse proxies in front of the app (Vercel, Nginx...), so the rate limit sees the real client IP |
+| Variable                | Example                                              | Notes                                                                                                                   |
+| ----------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`          | `postgres://user:password@localhost:5432/nest_shop`  | Add `?sslmode=require` for hosted databases such as Neon                                                                |
+| `DOMAIN`                | `http://localhost:3000`                              | Public URL of the API; used as the Swagger server                                                                       |
+| `JWT_ACCESS_SECRET`     | 96 random hex characters (min 32)                    | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`                                              |
+| `JWT_ACCESS_EXPIRES_IN` | `1d`                                                 | _Optional._ A number + `s`, `m`, `h` or `d` (`15m`, `7d`...). Default `1d`                                              |
+| `OTP_SECRET`            | 96 random hex characters (min 32)                    | Key used to hash the one-time codes stored in Redis                                                                     |
+| `REDIS_HOST`            | `localhost`                                          | Redis keeps the one-time codes (10 min, 5 attempts, 60 s between two codes)                                             |
+| `REDIS_PORT`            | `6379`                                               | _Optional._ Default `6379`                                                                                              |
+| `REDIS_PASSWORD`        | `...`                                                | _Optional._                                                                                                             |
+| `SMTP_HOST`             | `sandbox.smtp.mailtrap.io`                           | Port 465 uses TLS, any other port uses STARTTLS                                                                         |
+| `SMTP_PORT`             | `587`                                                |                                                                                                                         |
+| `SMTP_USERNAME`         | `you@example.com`                                    | _Optional_ (no login when empty). Also the default sender address                                                       |
+| `SMTP_PASSWORD`         | `...`                                                | _Optional._                                                                                                             |
+| `GOOGLE_CLIENT_ID`      | `...apps.googleusercontent.com`                      | Google Cloud Console → Credentials → OAuth client                                                                       |
+| `GOOGLE_CLIENT_SECRET`  | `...`                                                |                                                                                                                         |
+| `GOOGLE_CALLBACK_URL`   | `http://localhost:3000/api/v1/auth/google/callback`  | Must be listed as an authorised redirect URI in Google Console                                                          |
+| `CLOUDINARY_CLOUD_NAME` | `...`                                                | Used for profile images and product images                                                                              |
+| `CLOUDINARY_API_KEY`    | `...`                                                |                                                                                                                         |
+| `CLOUDINARY_API_SECRET` | `...`                                                |                                                                                                                         |
+| `PORT`                  | `3000`                                               | _Optional._ Default `3000`                                                                                              |
+| `MAIL_FROM`             | `"Shop" <no-reply@example.com>`                      | _Optional._ Default `"Nest JS" <SMTP_USERNAME>`                                                                         |
+| `THROTTLE_LIMIT`        | `100`                                                | _Optional._ Requests per minute per IP for the whole API                                                                |
+| `THROTTLE_DISABLED`     | `false`                                              | _Optional._ `true` turns the rate limit off (tests)                                                                     |
+| `CORS_ORIGINS`          | `https://shop.example.com,https://admin.example.com` | _Optional._ Front-end origins allowed by CORS. Unset: open in development, **closed in production**                     |
+| `TRUST_PROXY`           | `1`                                                  | _Optional._ Number of reverse proxies in front of the app (Vercel, Nginx...), so the rate limit sees the real client IP |
+
+The variables are validated with **Zod** (`src/config/env.validation.ts`) when the app starts.
 
 > **Never commit real `.env` files.** They are in `.gitignore`; only `.env.example` belongs in git.
 
@@ -238,25 +249,33 @@ Validation is strict: unknown properties in a body are rejected with `400`.
 **Lists** (products, reviews, wishlist, orders, coupons) return a plain **array**; the paging information is in the response
 headers `X-Total-Count`, `X-Page`, `X-Limit` and `X-Total-Pages` (exposed to browsers through CORS). Query: `page` (≥1), `limit` (1–100, default 10).
 
-### Users — `/api/users`
+### Auth — `/api/v1/auth`
 
-| Method & path                                    | Access | Description                                                                                          |
-| ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------- |
-| `POST /auth/register`                            | 🔓     | `{ email, password (6–72), username? (2–150) }` → sends a verification e-mail                        |
-| `POST /auth/login`                               | 🔓     | `{ email, password }` → `{ accessToken }`. Unverified accounts get a new verification e-mail instead |
-| `GET /verify-email/:id/:token`                   | 🔓     | Link from the e-mail                                                                                 |
-| `POST /forgot-password`                          | 🔓     | `{ email }` → same answer whether or not the account exists                                          |
-| `GET /reset-password/:id/:token`                 | 🔓     | Checks that the link is valid and not expired                                                        |
-| `POST /reset-password`                           | 🔓     | `{ userId, resetPasswordToken, newPassword }`                                                        |
-| `GET /auth/google` · `GET /auth/google/callback` | 🔓     | Google sign-in; the callback returns `{ accessToken }`                                               |
-| `GET /current-user`                              | 🔑     | My account                                                                                           |
-| `PUT /`                                          | 🔑     | `{ username?, password? }`                                                                           |
-| `POST /profile-image` · `DELETE /profile-image`  | 🔑     | Multipart field `profile-image`, images only, max 2 MB, stored on Cloudinary                         |
-| `GET /`                                          | 👑     | All users                                                                                            |
-| `DELETE /:id`                                    | 🔑     | The account owner or an admin                                                                        |
+| Method & path                          | Access | Description                                                                                    |
+| -------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `POST /register`                       | 🔓     | `{ email, password (6–72), username? (2–150) }` → emails a 6-digit code                        |
+| `POST /verify-email`                   | 🔓     | `{ email, otp }` → the account can log in                                                      |
+| `POST /resend-verification-otp`        | 🔓     | `{ email }` → same answer whether or not the account exists; at most one code per minute       |
+| `POST /login`                          | 🔓     | `{ email, password }` → `{ accessToken }`. An unverified account gets `403 EMAIL_NOT_VERIFIED` |
+| `POST /forgot-password`                | 🔓     | `{ email }` → emails a code; same answer whether or not the account exists                     |
+| `POST /reset-password`                 | 🔓     | `{ email, otp, newPassword }`                                                                  |
+| `POST /change-password`                | 🔑     | `{ currentPassword, newPassword }`                                                             |
+| `GET /google` · `GET /google/callback` | 🔓     | Google sign-in; the callback returns `{ accessToken }`                                         |
+
+A code is valid for 10 minutes and works once; 5 wrong guesses destroy it (ask for a new one).
+
+### Users — `/api/v1/users`
+
+| Method & path                                   | Access | Description                                                                  |
+| ----------------------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| `GET /current-user`                             | 🔑     | My account                                                                   |
+| `PUT /`                                         | 🔑     | `{ username? }`                                                              |
+| `POST /profile-image` · `DELETE /profile-image` | 🔑     | Multipart field `profile-image`, images only, max 2 MB, stored on Cloudinary |
+| `GET /`                                         | 👑     | All users                                                                    |
+| `DELETE /:id`                                   | 🔑     | The account owner or an admin                                                |
 
 Emails are trimmed and lower-cased, so `Sara@X.com` and `sara@x.com` are the same account.
-`password`, tokens and `googleId` are never returned by any endpoint, and the e-mail is only
+`password` and `googleId` are never returned by any endpoint, and the e-mail is only
 shown to its owner and to admins.
 
 ### Categories — `/api/categories`
@@ -269,15 +288,15 @@ shown to its owner and to admins.
 
 ### Products — `/api/products`
 
-| Method & path                 | Access | Description                                                                                                                                             |
-| ----------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /`                       | 🔓     | Returns an **array**; the total number of matches is in the `X-Total-Count` response header                                                             |
-| `GET /:id`                    | 🔓     | One product with its category, images (in order), `ratingAverage` and `reviewsCount`                                                                    |
-| `POST /`                      | 👑     | `{ title (2–50), description (≤2000), price (≥0), stock? (≥0), categoryId? }`                                                                           |
-| `PUT /:id`, `DELETE /:id`     | 👑     | Update / delete (the product's images are removed from Cloudinary too)                                                                                  |
-| `POST /:id/images`            | 👑     | Multipart field `images` (up to 5 files per request, 5 MB each; png, jpeg, webp, gif). A product can have **8** images in total. Returns all its images |
-| `DELETE /:id/images/:imageId` | 👑     | Removes the image and its Cloudinary file                                                                                                               |
-| `GET /:id/reviews`            | 🔓     | The reviews of the product, newest first (paginated)                                                                                                    |
+| Method & path             | Access | Description                                                                                                                                             |
+| ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                   | 🔓     | Returns an **array**; the total number of matches is in the `X-Total-Count` response header                                                             |
+| `GET /:id`                | 🔓     | One product with its category, `images` (`[{ url, publicId }]`, main image first), `ratingAverage` and `reviewsCount`                                   |
+| `POST /`                  | 👑     | `{ title (2–50), description (≤2000), price (≥0), stock? (≥0), categoryId? }`                                                                           |
+| `PUT /:id`, `DELETE /:id` | 👑     | Update / delete (the product's images are removed from Cloudinary too)                                                                                  |
+| `POST /:id/images`        | 👑     | Multipart field `images` (up to 5 files per request, 5 MB each; png, jpeg, webp, gif). A product can have **8** images in total. Returns all its images |
+| `DELETE /:id/images`      | 👑     | Body `{ publicId }` (from the product's `images`). Removes the image and its Cloudinary file                                                            |
+| `GET /:id/reviews`        | 🔓     | The reviews of the product, newest first (paginated)                                                                                                    |
 
 Products in a list carry `ratingAverage` (0 when there are no reviews) and `reviewsCount`; both are calculated from the reviews
 (one grouped query per page), so they can never go out of date. The reviews themselves are not part of the product: use
@@ -411,7 +430,6 @@ erDiagram
     USERS ||--o{ ORDERS : places
     CATEGORIES ||--o{ PRODUCTS : groups
     PRODUCTS ||--o{ REVIEWS : receives
-    PRODUCTS ||--o{ PRODUCT_IMAGES : shows
     USERS ||--o{ WISHLIST_ITEMS : saves
     PRODUCTS ||--o{ WISHLIST_ITEMS : "saved in"
     COUPONS ||--o{ ORDERS : "applied to"
@@ -450,12 +468,6 @@ erDiagram
         string couponCode "snapshot"
         string shippingAddress
     }
-    PRODUCT_IMAGES {
-        int id PK
-        string url
-        string publicId "Cloudinary id, never sent to clients"
-        int position "0 = main image"
-    }
     COUPONS {
         int id PK
         string code UK "UPPER CASE"
@@ -486,21 +498,20 @@ reviews, cart and wishlist and sets `orders.userId` to `NULL`; removing a coupon
 ## Security
 
 - Passwords are hashed with bcrypt; login takes the same time whether or not the e-mail exists.
-- `password`, `verificationToken`, `resetPasswordToken` and `googleId` never appear in any response; e-mails are hidden from
+- `password` and `googleId` never appear in any response; e-mails are hidden from
   public product and review data.
-- Verification and reset tokens are random, compared in constant time; a reset token expires after 1 hour and can be used once
-  (atomic update).
+- Verification and reset use 6-digit one-time codes: only an HMAC of the code is stored (Redis), it expires after 10 minutes, works once,
+  and is destroyed after 5 wrong guesses (checked atomically in a Lua script); a new code can be requested once a minute.
 - Forgot-password gives the same answer for unknown e-mails (no account enumeration).
 - A Google sign-in cannot take over an account that someone pre-registered with the same e-mail by password.
 - **Secure by default:** `JwtAuthGuard` is global, so a route is protected unless it carries `@Public()`. An e2e test lists every
   route of the app and fails if a route that is not in the expected public list answers without a token.
 - The user is read from the database on every protected request: a demoted or deleted user loses access immediately.
 - CORS is closed in production unless `CORS_ORIGINS` lists the front-end origins.
-- Unexpected errors answer `500 Internal server error`; the details only go to the log. The access log writes the route pattern,
-  never the real URL, so verification / reset tokens in links stay out of the logs.
+- Unexpected errors answer `500 Internal server error`; the details only go to the log.
 - Image uploads (Cloudinary): type whitelist (no SVG), size limit, kept in memory (nothing is written to the server disk).
 - Uploads: login required, extension chosen from the MIME type, random names, path traversal (`../`) blocked.
-- Rate limiting: 100 requests/minute/IP globally; login, register, forgot-password and reset-password 5/minute/IP.
+- Rate limiting: 100 requests/minute/IP globally; every `/auth` route 5/minute/IP.
 - Helmet headers, strict DTO validation (`whitelist` + `forbidNonWhitelisted`), parameterised SQL everywhere.
 
 ---
@@ -550,12 +561,13 @@ The GitHub Actions workflow in [`.github/workflows/ci.yml`](.github/workflows/ci
 src/
   common/          shared by every module (see below)
   config/          env validation
-  users/           auth, Google strategy, DTOs, profile image
+  auth/            register / verify / login / Google / password reset (OTP) / change password, guards are registered here
+  users/           the user entity, profile, profile image, admin user list
   products/        products, product images (+ unit tests)
   categories/   reviews/   cart/   orders/   uploads/
   coupons/         coupon CRUD, validation and redemption
   wishlist/        saved products
-  mail/            mail service and EJS templates (verify e-mail, reset password)
+  mail/            mail service and the OTP e-mail template
   app.module.ts    imports + the global guards (rate limit -> auth -> roles)
   app.setup.ts     HTTP setup: Helmet, CORS, trust proxy, Swagger (used by main.ts and by the e2e tests)
 db/
@@ -571,20 +583,25 @@ rest_client/       sample requests (VS Code REST Client)
 Code that more than one module uses lives in `src/common`. Each sub-folder has an `index.ts`, so imports look like
 `import { Auth, Public } from '../common/decorators'`.
 
-| Folder                         | Contains                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `guards/`                      | `JwtAuthGuard` (global: token + user from the database, skips `@Public()`), `RolesGuard` (global: checks `@Roles()`)    |
-| `decorators/`                  | `@Public()`, `@Auth(...roles)` (Swagger + roles), `@Roles()`, `@CurrentUser()`, `@ApiPaginated()`                       |
-| `pagination/`                  | `PaginationQueryDto` (`?page&limit`), `Paginated<T>` and `resolvePagination()`                                          |
-| `interceptors/`                | `PaginationInterceptor` (`Paginated` → array + `X-Total-Count`... headers), `LoggingInterceptor` (one line per request) |
-| `filters/`                     | `AllExceptionsFilter` (one error format, database errors → 4xx, 500 without details)                                    |
-| `cloudinary/`                  | `CloudinaryModule` / `CloudinaryService` (upload, delete, clear errors) and `deleteImageQuietly()`                      |
-| `upload/`                      | `imageUploadOptions()` — Multer options for image routes (memory storage, type whitelist, size limit)                   |
-| `enums/` `types/` `constants/` | `UserType`, `OrderStatus`, `CouponType`, `JwtPayloadType`, metadata keys, header names                                  |
-| `utils/`                       | `PG_ERROR` codes, `pgErrorCode()`, `rowsOf()`, `toCents()` / `fromCents()`, `escapeLike()`, `safeEqual()`               |
-| `transforms/` `transformers/`  | `@NormalizeEmail()`, `@NormalizeCode()`, the numeric column transformer                                                 |
-| `entities/`                    | `TimestampedEntity` (id + createdAt + updatedAt) for new tables                                                         |
-| `common.module.ts`             | Global module: JWT configuration, the global filter, interceptors and validation pipe                                   |
+| Folder                         | Contains                                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guards/`                      | `JwtAuthGuard` (global: token + user from the database, puts the `User` on the request, skips `@Public()`), `RolesGuard` (global: checks `@Roles()`), `GoogleAuthGuard` |
+| `decorators/`                  | `@Public()`, `@Auth(...roles)` (Swagger + roles), `@Roles()`, `@CurrentUser()` (the `User` entity), `@ApiPaginated()`                                                   |
+| `pagination/`                  | `PaginationQueryDto` (`?page&limit`), `Paginated<T>` and `resolvePagination()`                                                                                          |
+| `interceptors/`                | `PaginationInterceptor` (`Paginated` → array + `X-Total-Count`... headers), `LoggingInterceptor` (one line per request)                                                 |
+| `filters/`                     | `AllExceptionsFilter` (one error format with a `code`, **all** PostgreSQL errors → 4xx by error code and constraint name, 500 without details)                          |
+| `cloudinary/`                  | `CloudinaryModule` / `CloudinaryService` (upload, delete, clear errors) and `deleteImageQuietly()`                                                                      |
+| `upload/`                      | `imageUploadOptions()` — Multer options for image routes (memory storage, type whitelist, size limit)                                                                   |
+| `enums/` `types/` `constants/` | `UserType`, `OrderStatus`, `CouponType`, `AuthenticatedRequest`, metadata keys, header names                                                                            |
+| `utils/`                       | `rowsOf()`, `toCents()` / `fromCents()`, `escapeLike()`, `durationToSeconds()`                                                                                          |
+| `transforms/` `transformers/`  | `@NormalizeEmail()`, `@NormalizeCode()`, the numeric column transformer                                                                                                 |
+| `errors/`                      | `ErrorCode` enum: the `code` field of every error response                                                                                                              |
+| `redis/`                       | Global `RedisModule` / `RedisService` (ioredis)                                                                                                                         |
+| `common.module.ts`             | Global module: the global filter, interceptors and validation pipe                                                                                                      |
+
+**Database errors:** services never look at PostgreSQL error codes. They just save or insert; a unique / foreign key / check violation
+reaches `AllExceptionsFilter`, which answers by error code and, for the constraints listed in `PG_CONSTRAINTS`, with a specific `code` and message
+(for example `CATEGORY_NAME_TAKEN`). To give a new constraint its own message, add its name there.
 
 **How to add a feature:** create the module, put `@Public()` only on routes everybody may call, `@Auth()` / `@Auth(UserType.ADMIN)` on
 the others (it documents them in Swagger), return `Paginated.of(items, total, query)` from list services, and add the entity to
@@ -600,19 +617,19 @@ the others (it documents them in Swagger), return `Paginated.of(items, total, qu
 - Set `CORS_ORIGINS` to the URL(s) of your front-end; in production CORS is closed when it is empty.
 - Disk uploads (`/images`) do not work on serverless platforms such as Vercel and are lost on ephemeral
   file systems; use Cloudinary or S3 there. Profile images and product images already use Cloudinary.
-- Set `DOMAIN` to the public URL, otherwise e-mail links point at the wrong host.
+- Redis must be reachable (`REDIS_HOST`): without it nobody can verify an email or reset a password.
 - The Swagger UI is enabled in every environment; protect or remove it if the API is public.
 
 ## Troubleshooting
 
-| Symptom                                             | Cause / fix                                                                           |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `Invalid environment variables: ...` at startup     | Fill them in the env file for your `NODE_ENV`, or export them                         |
-| `column "..." does not exist`                       | Migrations were not applied: `npm run migration:run`                                  |
-| Registration returns `503 Could not send the email` | SMTP settings are wrong (port 465 is not supported, use 587 / 2525)                   |
-| Verification link points to the wrong host          | Fix `DOMAIN`                                                                          |
-| Google login: `redirect_uri_mismatch`               | `GOOGLE_CALLBACK_URL` must exactly match an authorised redirect URI in Google Console |
-| e2e refuses to start                                | The database must be on `localhost` and named like `nest_e2e` (it is wiped)           |
+| Symptom                                         | Cause / fix                                                                                                          |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `Invalid environment variables: ...` at startup | Fill them in the env file for your `NODE_ENV`, or export them                                                        |
+| `column "..." does not exist`                   | Migrations were not applied: `npm run migration:run`                                                                 |
+| The OTP e-mail never arrives                    | SMTP settings are wrong (the error is in the log; registration itself still succeeds). Ask for a new code after 60 s |
+| `Redis error: connect ECONNREFUSED`             | Fix `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`                                                                   |
+| Google login: `redirect_uri_mismatch`           | `GOOGLE_CALLBACK_URL` must exactly match an authorised redirect URI in Google Console                                |
+| e2e refuses to start                            | The database must be on `localhost` and named like `nest_e2e` (it is wiped)                                          |
 
 ## Known limitations
 

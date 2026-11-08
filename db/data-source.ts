@@ -5,7 +5,6 @@ import { Review } from '../src/reviews/reviews.entity';
 import { Category } from '../src/categories/categories.entity';
 import { CartItem } from '../src/cart/cart-item.entity';
 import { Order } from '../src/orders/orders.entity';
-import { ProductImage } from '../src/products/product-image.entity';
 import { Coupon } from '../src/coupons/coupon.entity';
 import { WishlistItem } from '../src/wishlist/wishlist-item.entity';
 import { OrderItem } from '../src/orders/order-item.entity';
@@ -21,7 +20,6 @@ export const dataSourceOptions: DataSourceOptions = {
   entities: [
     User,
     Product,
-    ProductImage,
     Review,
     Category,
     CartItem,
