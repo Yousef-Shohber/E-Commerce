@@ -6,7 +6,6 @@ import {
   PaginationQueryDto,
   resolvePagination,
 } from '../common/pagination';
-import { PG_ERROR, pgErrorCode } from '../common/utils';
 import { WishlistItem } from './wishlist-item.entity';
 
 @Injectable()
@@ -35,18 +34,11 @@ export class WishlistService {
    * double click or a retry does no harm.
    */
   public async add(userId: number, productId: number) {
-    try {
-      await this.wishlistRepository.query(
-        `INSERT INTO wishlist_items ("userId", "productId") VALUES ($1, $2)
-          ON CONFLICT ("userId", "productId") DO NOTHING`,
-        [userId, productId],
-      );
-    } catch (error) {
-      if (pgErrorCode(error) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
-        throw new NotFoundException(`Product with id ${productId} not found`);
-      }
-      throw error;
-    }
+    await this.wishlistRepository.query(
+      `INSERT INTO wishlist_items ("userId", "productId") VALUES ($1, $2)
+        ON CONFLICT ("userId", "productId") DO NOTHING`,
+      [userId, productId],
+    );
 
     return this.wishlistRepository.findOneOrFail({
       where: { userId, productId },

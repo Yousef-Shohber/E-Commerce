@@ -12,7 +12,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { PaginationQueryDto } from '../common/pagination';
-import type { JwtPayloadType } from '../common/types';
+import type { User } from '../users/users.entity';
 import { WishlistService } from './wishlist.service';
 
 @ApiTags('Wishlist')
@@ -24,26 +24,26 @@ export class WishlistController {
   @Get()
   @ApiPaginated('Saved products, newest first')
   public getWishlist(
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Query() query: PaginationQueryDto,
   ) {
-    return this.wishlistService.getWishlist(payload.id, query);
+    return this.wishlistService.getWishlist(user.id, query);
   }
 
   @Post('/:productId')
   @HttpCode(HttpStatus.OK)
   public add(
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Param('productId', ParseIntPipe) productId: number,
   ) {
-    return this.wishlistService.add(payload.id, productId);
+    return this.wishlistService.add(user.id, productId);
   }
 
   @Delete('/:productId')
   public remove(
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Param('productId', ParseIntPipe) productId: number,
   ) {
-    return this.wishlistService.remove(payload.id, productId);
+    return this.wishlistService.remove(user.id, productId);
   }
 }
