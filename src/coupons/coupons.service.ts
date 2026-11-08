@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,13 +12,7 @@ import {
   PaginationQueryDto,
   resolvePagination,
 } from '../common/pagination';
-import {
-  PG_ERROR,
-  fromCents,
-  pgErrorCode,
-  rowsOf,
-  toCents,
-} from '../common/utils';
+import { fromCents, rowsOf, toCents } from '../common/utils';
 import { Coupon } from './coupon.entity';
 import { CreateCouponDto } from './dtos/create-coupon.dto';
 import { UpdateCouponDto } from './dtos/update-coupon.dto';
@@ -217,14 +210,7 @@ export class CouponsService {
       throw new BadRequestException('expiresAt must be after startsAt');
     }
 
-    try {
-      return await this.couponsRepository.save(coupon);
-    } catch (error) {
-      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
-        throw new ConflictException('Coupon code already exists');
-      }
-      throw error;
-    }
+    return this.couponsRepository.save(coupon);
   }
 }
 

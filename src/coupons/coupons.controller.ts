@@ -15,7 +15,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { UserType } from '../common/enums';
 import { PaginationQueryDto } from '../common/pagination';
-import type { JwtPayloadType } from '../common/types';
+import type { User } from '../users/users.entity';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dtos/create-coupon.dto';
 import { UpdateCouponDto } from './dtos/update-coupon.dto';
@@ -30,11 +30,8 @@ export class CouponsController {
   @Post('validate')
   @Auth()
   @HttpCode(HttpStatus.OK)
-  public validate(
-    @CurrentUser() payload: JwtPayloadType,
-    @Body() body: ValidateCouponDto,
-  ) {
-    return this.couponsService.preview(payload.id, body.code);
+  public validate(@CurrentUser() user: User, @Body() body: ValidateCouponDto) {
+    return this.couponsService.preview(user.id, body.code);
   }
 
   // Admin

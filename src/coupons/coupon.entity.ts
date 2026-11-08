@@ -1,5 +1,11 @@
-import { Check, Column, Entity } from 'typeorm';
-import { TimestampedEntity } from '../common/entities';
+import {
+  Check,
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { CouponType } from '../common/enums';
 import { NumericTransformer } from '../common/transformers';
 
@@ -7,7 +13,10 @@ import { NumericTransformer } from '../common/transformers';
 @Check('"value" > 0')
 @Check(`"type" <> 'percentage' OR "value" <= 100`)
 @Check('"usedCount" >= 0')
-export class Coupon extends TimestampedEntity {
+export class Coupon {
+  @PrimaryGeneratedColumn()
+  id: number;
+
   @Column({ type: 'varchar', length: 50, unique: true })
   code: string;
 
@@ -54,4 +63,10 @@ export class Coupon extends TimestampedEntity {
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
 }
