@@ -1,11 +1,9 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import type { Request } from 'express';
-import { JwtPayloadType } from '../types';
-import { CURRENT_USER_KEY } from '../constants';
+import type { User } from '../../users/users.entity';
+import type { AuthenticatedRequest } from '../types';
 
+/** The logged-in user, loaded by `JwtAuthGuard` */
 export const CurrentUser = createParamDecorator(
-  (_data: unknown, context: ExecutionContext): JwtPayloadType => {
-    const request = context.switchToHttp().getRequest<Request>();
-    return request[CURRENT_USER_KEY] as JwtPayloadType;
-  },
+  (_data: unknown, context: ExecutionContext): User =>
+    context.switchToHttp().getRequest<AuthenticatedRequest>().user,
 );

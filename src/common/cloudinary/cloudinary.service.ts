@@ -7,11 +7,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'node:stream';
+import type { ImageRef } from './image-ref.interface';
 
-export interface CloudinaryUploadResult {
-  url: string;
-  publicId: string;
-}
+export type CloudinaryUploadResult = ImageRef;
 
 @Injectable()
 export class CloudinaryService {

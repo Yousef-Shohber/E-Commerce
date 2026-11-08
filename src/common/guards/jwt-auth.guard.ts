@@ -6,21 +6,20 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
-import type { Request } from 'express';
-import { TokenExpiredError } from 'jsonwebtoken';
-import { DataSource } from 'typeorm';
-import { User } from '../../users/users.entity';
-import { CURRENT_USER_KEY, IS_PUBLIC_KEY } from '../constants';
-import { JwtPayloadType } from '../types';
+import { JwtService, TokenExpiredError } from '@nestjs/jwt';
+import { AccessTokenPayload } from '../../auth/types/token.types';
+import { UsersService } from '../../users/users.service';
+import { IS_PUBLIC_KEY } from '../constants';
+import { ErrorCode } from '../errors';
+import type { AuthenticatedRequest } from '../types';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly jwtService: JwtService,
+    private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly dataSource: DataSource,
+    private readonly users: UsersService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -30,39 +29,56 @@ export class JwtAuthGuard implements CanActivate {
     );
     if (isPublic) return true;
 
-    const request: Request = context.switchToHttp().getRequest();
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-
-    if (!token || type !== 'Bearer') {
-      throw new UnauthorizedException('Access Denied, No Token Provided');
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const token = this.extractToken(request);
+    if (!token) {
+      throw new UnauthorizedException({
+        code: ErrorCode.ACCESS_TOKEN_MISSING,
+        message: 'Missing access token',
+      });
     }
 
-    let payload: JwtPayloadType;
+    let payload: AccessTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync<JwtPayloadType>(token, {
-        secret: this.config.get<string>('JWT_SECRET'),
+      payload = await this.jwt.verifyAsync<AccessTokenPayload>(token, {
+        secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        algorithms: ['HS256'],
       });
     } catch (error) {
       if (error instanceof TokenExpiredError) {
-        throw new UnauthorizedException('Token has expired');
+        throw new UnauthorizedException({
+          code: ErrorCode.ACCESS_TOKEN_EXPIRED,
+          message: 'Expired access token',
+        });
       }
-      throw new UnauthorizedException('Access Denied, Invalid Token');
+
+      throw new UnauthorizedException({
+        code: ErrorCode.ACCESS_TOKEN_INVALID,
+        message: 'Invalid access token',
+      });
     }
 
-    const user = await this.dataSource.getRepository(User).findOne({
-      where: { id: payload.id },
-      select: { id: true, userType: true },
-    });
+    if (typeof payload.userId !== 'number') {
+      throw new UnauthorizedException({
+        code: ErrorCode.ACCESS_TOKEN_INVALID,
+        message: 'Invalid access token',
+      });
+    }
 
+    const user = await this.users.findById(payload.userId);
     if (!user) {
-      throw new UnauthorizedException('Access Denied, User no longer exists');
+      throw new UnauthorizedException({
+        code: ErrorCode.ACCESS_TOKEN_INVALID,
+        message: 'Invalid access token',
+      });
     }
 
-    request[CURRENT_USER_KEY] = {
-      id: user.id,
-      userType: user.userType,
-    } satisfies JwtPayloadType;
-
+    request.user = user;
     return true;
+  }
+
+  private extractToken(request: AuthenticatedRequest): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' && token ? token : undefined;
   }
 }

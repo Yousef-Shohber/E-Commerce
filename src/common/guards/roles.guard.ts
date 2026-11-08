@@ -5,15 +5,11 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { CURRENT_USER_KEY, ROLES_KEY } from '../constants';
+import { ROLES_KEY } from '../constants';
 import { UserType } from '../enums';
-import { JwtPayloadType } from '../types';
-import type { Request } from 'express';
+import { ErrorCode } from '../errors';
+import type { AuthenticatedRequest } from '../types';
 
-/**
- * Global guard, runs after `JwtAuthGuard`: when a route has @Roles() (or
- * @Auth(...roles)) the logged-in user must have one of these roles.
- */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -25,11 +21,12 @@ export class RolesGuard implements CanActivate {
     );
     if (!roles?.length) return true;
 
-    const request = context.switchToHttp().getRequest<Request>();
-    const user = request[CURRENT_USER_KEY] as JwtPayloadType | undefined;
-
+    const { user } = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (!user || !roles.includes(user.userType)) {
-      throw new ForbiddenException('Access Denied, Not Allowed');
+      throw new ForbiddenException({
+        code: ErrorCode.INSUFFICIENT_ROLE,
+        message: 'You do not have permission to perform this action',
+      });
     }
 
     return true;

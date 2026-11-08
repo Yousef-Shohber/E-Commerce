@@ -36,17 +36,20 @@ no double orders, no lost updates).
 
 ## Features
 
-| Area           | What you get                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Auth**       | Register with email verification (SMTP), JWT login, forgot / reset password (link valid for 1 hour, single use), Google OAuth 2.0 |
-| **Users**      | Profile, update username / password, delete account (owner or admin), profile image on Cloudinary, roles `admin` / `user`         |
-| **Categories** | CRUD (admin only), unique names                                                                                                   |
-| **Products**   | CRUD (admin only), stock, category, case-insensitive search, price filters, sorting, pagination with an `X-Total-Count` header    |
-| **Reviews**    | Rating 1–5 with a comment, **one review per user per product**                                                                    |
-| **Cart**       | Add / change / remove / clear; adding is a single atomic statement                                                                |
-| **Orders**     | Checkout from the cart, cancel (stock is returned), status flow, "my orders" and an admin list with filters                       |
-| **Uploads**    | Image upload to disk (png, jpg, gif, webp, 5 MB, login required)                                                                  |
-| **Ops**        | `GET /api/health` (checks the database), Swagger UI at `/swagger`, env validation at startup, rate limiting, Helmet               |
+| Area           | What you get                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Auth**       | Register with email verification (SMTP), JWT login, forgot / reset password (link valid for 1 hour, single use), Google OAuth 2.0  |
+| **Users**      | Profile, update username / password, delete account (owner or admin), profile image on Cloudinary, roles `admin` / `user`          |
+| **Categories** | CRUD (admin only), unique names                                                                                                    |
+| **Products**   | CRUD (admin only), stock, category, case-insensitive search, price filters, sorting, pagination with an `X-Total-Count` header     |
+| **Images**     | Up to 8 images per product on **Cloudinary** (admin), kept in order; files are deleted from Cloudinary with the image / product    |
+| **Reviews**    | Rating 1–5 with a comment, **one review per user per product**; products show `ratingAverage` and `reviewsCount`; paginated list   |
+| **Wishlist**   | Save / remove products, paginated list, saving twice is harmless                                                                   |
+| **Coupons**    | Percentage or fixed coupons (admin), minimum cart, cap, validity dates, usage limit; the limit can never be passed concurrently    |
+| **Cart**       | Add / change / remove / clear; adding is a single atomic statement                                                                 |
+| **Orders**     | Checkout from the cart (with an optional coupon), cancel (stock and coupon use are returned), status flow, "my orders", admin list |
+| **Uploads**    | Image upload to disk (png, jpg, gif, webp, 5 MB, login required)                                                                   |
+| **Ops**        | `GET /api/health`, Swagger UI at `/swagger`, env validation, rate limiting, Helmet, CORS, one error format, access log             |
 
 ## Tech stack
 
@@ -166,25 +169,27 @@ Ready-made requests for every endpoint are in [`rest_client/*.http`](rest_client
 
 All variables below are **required** unless marked optional.
 
-| Variable                | Example                                                | Notes                                                                        |
-| ----------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `DATABASE_URL`          | `postgres://user:password@localhost:5432/nest_shop`    | Add `?sslmode=require` for hosted databases such as Neon                     |
-| `DOMAIN`                | `http://localhost:3000`                                | Public URL of the API; used in e-mail links and as the Swagger server        |
-| `JWT_SECRET`            | 96 random hex characters                               | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`   |
-| `JWT_EXPIRES_IN`        | `1d`                                                   | Any [`ms`](https://github.com/vercel/ms) value (`15m`, `7d`, ...)            |
-| `SMTP_HOST`             | `sandbox.smtp.mailtrap.io`                             | STARTTLS is used (`secure: false`), so use port **587** or **2525**, not 465 |
-| `SMTP_PORT`             | `587`                                                  |                                                                              |
-| `SMTP_USERNAME`         | `you@example.com`                                      | Also the default sender address                                              |
-| `SMTP_PASSWORD`         | `...`                                                  |                                                                              |
-| `GOOGLE_CLIENT_ID`      | `...apps.googleusercontent.com`                        | Google Cloud Console → Credentials → OAuth client                            |
-| `GOOGLE_CLIENT_SECRET`  | `...`                                                  |                                                                              |
-| `GOOGLE_CALLBACK_URL`   | `http://localhost:3000/api/users/auth/google/callback` | Must be listed as an authorised redirect URI in Google Console               |
-| `CLOUDINARY_CLOUD_NAME` | `...`                                                  | Used for profile images                                                      |
-| `CLOUDINARY_API_KEY`    | `...`                                                  |                                                                              |
-| `CLOUDINARY_API_SECRET` | `...`                                                  |                                                                              |
-| `PORT`                  | `3000`                                                 | _Optional._ Default `3000`                                                   |
-| `MAIL_FROM`             | `"Shop" <no-reply@example.com>`                        | _Optional._ Default `"Nest JS" <SMTP_USERNAME>`                              |
-| `THROTTLE_LIMIT`        | `100`                                                  | _Optional._ Requests per minute per IP for the whole API                     |
+| Variable                | Example                                                | Notes                                                                                                                   |
+| ----------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`          | `postgres://user:password@localhost:5432/nest_shop`    | Add `?sslmode=require` for hosted databases such as Neon                                                                |
+| `DOMAIN`                | `http://localhost:3000`                                | Public URL of the API; used in e-mail links and as the Swagger server                                                   |
+| `JWT_SECRET`            | 96 random hex characters                               | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`                                              |
+| `JWT_EXPIRES_IN`        | `1d`                                                   | Any [`ms`](https://github.com/vercel/ms) value (`15m`, `7d`, ...)                                                       |
+| `SMTP_HOST`             | `sandbox.smtp.mailtrap.io`                             | STARTTLS is used (`secure: false`), so use port **587** or **2525**, not 465                                            |
+| `SMTP_PORT`             | `587`                                                  |                                                                                                                         |
+| `SMTP_USERNAME`         | `you@example.com`                                      | Also the default sender address                                                                                         |
+| `SMTP_PASSWORD`         | `...`                                                  |                                                                                                                         |
+| `GOOGLE_CLIENT_ID`      | `...apps.googleusercontent.com`                        | Google Cloud Console → Credentials → OAuth client                                                                       |
+| `GOOGLE_CLIENT_SECRET`  | `...`                                                  |                                                                                                                         |
+| `GOOGLE_CALLBACK_URL`   | `http://localhost:3000/api/users/auth/google/callback` | Must be listed as an authorised redirect URI in Google Console                                                          |
+| `CLOUDINARY_CLOUD_NAME` | `...`                                                  | Used for profile images and product images                                                                              |
+| `CLOUDINARY_API_KEY`    | `...`                                                  |                                                                                                                         |
+| `CLOUDINARY_API_SECRET` | `...`                                                  |                                                                                                                         |
+| `PORT`                  | `3000`                                                 | _Optional._ Default `3000`                                                                                              |
+| `MAIL_FROM`             | `"Shop" <no-reply@example.com>`                        | _Optional._ Default `"Nest JS" <SMTP_USERNAME>`                                                                         |
+| `THROTTLE_LIMIT`        | `100`                                                  | _Optional._ Requests per minute per IP for the whole API                                                                |
+| `CORS_ORIGINS`          | `https://shop.example.com,https://admin.example.com`   | _Optional._ Front-end origins allowed by CORS. Unset: open in development, **closed in production**                     |
+| `TRUST_PROXY`           | `1`                                                    | _Optional._ Number of reverse proxies in front of the app (Vercel, Nginx...), so the rate limit sees the real client IP |
 
 > **Never commit real `.env` files.** They are in `.gitignore`; only `.env.example` belongs in git.
 
@@ -225,8 +230,13 @@ the same product. Clean those rows and run it again.
 ## API reference
 
 Every route lives under `/api`. Legend: 🔓 public · 🔑 needs `Authorization: Bearer <token>` · 👑 admin only.
-Errors use the standard Nest shape: `{ "statusCode": 400, "message": "...", "error": "Bad Request" }`.
+Every route needs a token **unless it is marked 🔓** (the guard is global, so a new route is protected by default).
+Errors always have the same shape: `{ "statusCode": 400, "message": "...", "error": "Bad Request", "path": "/api/...", "timestamp": "..." }`
+(`message` is an array for validation errors; unexpected `500` errors never show their details).
 Validation is strict: unknown properties in a body are rejected with `400`.
+
+**Lists** (products, reviews, wishlist, orders, coupons) return a plain **array**; the paging information is in the response
+headers `X-Total-Count`, `X-Page`, `X-Limit` and `X-Total-Pages` (exposed to browsers through CORS). Query: `page` (≥1), `limit` (1–100, default 10).
 
 ### Users — `/api/users`
 
@@ -259,12 +269,19 @@ shown to its owner and to admins.
 
 ### Products — `/api/products`
 
-| Method & path             | Access | Description                                                                                 |
-| ------------------------- | ------ | ------------------------------------------------------------------------------------------- |
-| `GET /`                   | 🔓     | Returns an **array**; the total number of matches is in the `X-Total-Count` response header |
-| `GET /:id`                | 🔓     | One product with its category and reviews                                                   |
-| `POST /`                  | 👑     | `{ title (2–50), description (≤2000), price (≥0), stock? (≥0), categoryId? }`               |
-| `PUT /:id`, `DELETE /:id` | 👑     | Update / delete                                                                             |
+| Method & path                 | Access | Description                                                                                                                                             |
+| ----------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                       | 🔓     | Returns an **array**; the total number of matches is in the `X-Total-Count` response header                                                             |
+| `GET /:id`                    | 🔓     | One product with its category, images (in order), `ratingAverage` and `reviewsCount`                                                                    |
+| `POST /`                      | 👑     | `{ title (2–50), description (≤2000), price (≥0), stock? (≥0), categoryId? }`                                                                           |
+| `PUT /:id`, `DELETE /:id`     | 👑     | Update / delete (the product's images are removed from Cloudinary too)                                                                                  |
+| `POST /:id/images`            | 👑     | Multipart field `images` (up to 5 files per request, 5 MB each; png, jpeg, webp, gif). A product can have **8** images in total. Returns all its images |
+| `DELETE /:id/images/:imageId` | 👑     | Removes the image and its Cloudinary file                                                                                                               |
+| `GET /:id/reviews`            | 🔓     | The reviews of the product, newest first (paginated)                                                                                                    |
+
+Products in a list carry `ratingAverage` (0 when there are no reviews) and `reviewsCount`; both are calculated from the reviews
+(one grouped query per page), so they can never go out of date. The reviews themselves are not part of the product: use
+`GET /api/products/:id/reviews`.
 
 `GET /` query: `title` (contains, case-insensitive; `%` and `_` are treated literally), `minPrice`, `maxPrice`,
 `categoryId`, `sortBy` (`createdAt` \| `price` \| `title`), `order` (`ASC` \| `DESC`), `page` (≥1), `limit` (1–100, default 10).
@@ -294,14 +311,38 @@ The cart does **not** reserve stock; stock is checked and taken at checkout.
 
 ### Orders — `/api/orders` (🔑 all)
 
-| Method & path       | Access      | Description                                                                                       |
-| ------------------- | ----------- | ------------------------------------------------------------------------------------------------- |
-| `POST /`            | 🔑          | `{ shippingAddress (5–500) }` — checkout from the cart. `400` empty cart · `409` not enough stock |
-| `GET /me`           | 🔑          | My orders (`status`, `page`, `limit`); total in `X-Total-Count`                                   |
-| `GET /:id`          | owner/admin | One order with its items                                                                          |
-| `POST /:id/cancel`  | owner/admin | Cancel and give the stock back                                                                    |
-| `GET /`             | 👑          | All orders (`status`, `userId`, `page`, `limit`)                                                  |
-| `PATCH /:id/status` | 👑          | `{ status }` — only valid transitions are accepted (`409` otherwise)                              |
+| Method & path       | Access      | Description                                                                                                                  |
+| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /`            | 🔑          | `{ shippingAddress (5–500), couponCode? }` — checkout from the cart. `400` empty cart or bad coupon · `409` not enough stock |
+| `GET /me`           | 🔑          | My orders (`status`, `page`, `limit`); total in `X-Total-Count`                                                              |
+| `GET /:id`          | owner/admin | One order with its items                                                                                                     |
+| `POST /:id/cancel`  | owner/admin | Cancel and give the stock back                                                                                               |
+| `GET /`             | 👑          | All orders (`status`, `userId`, `page`, `limit`)                                                                             |
+| `PATCH /:id/status` | 👑          | `{ status }` — only valid transitions are accepted (`409` otherwise)                                                         |
+
+### Coupons — `/api/coupons`
+
+| Method & path       | Access | Description                                                                                           |
+| ------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
+| `POST /validate`    | 🔑     | `{ code }` → `{ code, subtotal, discount, total }` for **my cart**. Nothing is used yet               |
+| `POST /`            | 👑     | Create a coupon (body below)                                                                          |
+| `GET /`, `GET /:id` | 👑     | List (paginated) / read, with `usedCount`                                                             |
+| `PATCH /:id`        | 👑     | Change anything **except the code**; send `null` to remove `maxDiscountAmount` / `usageLimit` / dates |
+| `DELETE /:id`       | 👑     | Delete. Orders that used it keep its code and discount                                                |
+
+Body of `POST /`: `code` (3–50 letters, digits, `-`, `_`; stored in UPPER CASE, unique), `type` (`percentage` \| `fixed`),
+`value` (percentage 0.01–100, or an amount), and optional `minOrderAmount`, `maxDiscountAmount`, `startsAt`, `expiresAt`,
+`usageLimit` (total number of orders), `isActive`.
+
+The discount is rounded to the cent and can never be more than the cart (the total is never negative).
+
+### Wishlist — `/api/wishlist` (🔑 all)
+
+| Method & path        | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `GET /`              | My saved products, newest first (paginated)                              |
+| `POST /:productId`   | Save a product. Saving it again is not an error. Unknown product → `404` |
+| `DELETE /:productId` | Remove it. Not in the wishlist → `404`                                   |
 
 ### Uploads — `/api/uploads`
 
@@ -314,6 +355,9 @@ The cart does **not** reserve stock; stock is checked and taken at checkout.
 
 Allowed types: png, jpeg, gif, webp — max 5 MB. The stored name is random and its extension is
 derived from the MIME type, never from the uploaded file name.
+
+> These files live on the **server disk**: fine for one server, but lost on ephemeral / serverless hosts. Product images and
+> profile images use Cloudinary instead.
 
 ### Health
 
@@ -338,18 +382,22 @@ pending ──► paid ──► shipped ──► delivered
 2. Stock is reduced with `UPDATE ... SET stock = stock - n WHERE stock >= n`, so two buyers can
    never take the last item → **no overselling**. Products are always processed in the same order
    to avoid deadlocks.
-3. The order is saved together with a **snapshot** of each product's title and unit price.
+3. If a `couponCode` is sent, the coupon is used **after** the stock, with a single
+   `UPDATE ... WHERE usedCount < usageLimit AND isActive AND <dates ok> RETURNING`, so the usage limit can never be passed,
+   not even by many buyers at the same moment. Products are always locked before coupons (checkout and cancel), so there are no deadlocks.
+4. The order is saved together with a **snapshot** of each product's title and unit price, its `subtotal`, `discountAmount`,
+   `totalPrice` (= subtotal − discount) and the `couponCode`.
 
 If any step fails, everything rolls back, including the cart and the stock.
 
 Other rules:
 
 - **Cancel** is a compare-and-set on the status, so cancelling twice (or from two places at once)
-  returns the stock only once.
+  returns the stock **and the coupon use** only once.
 - Money is calculated in **cents** (integers), so there are no floating-point errors.
 - The price used is the one at checkout time, not when the item was added to the cart.
 - Deleting a user keeps their orders (`userId` becomes `NULL`); deleting a product keeps its order
-  lines (they keep the saved title and price).
+  lines (they keep the saved title and price); deleting a coupon keeps its orders (the code and discount stay).
 
 ---
 
@@ -363,6 +411,10 @@ erDiagram
     USERS ||--o{ ORDERS : places
     CATEGORIES ||--o{ PRODUCTS : groups
     PRODUCTS ||--o{ REVIEWS : receives
+    PRODUCTS ||--o{ PRODUCT_IMAGES : shows
+    USERS ||--o{ WISHLIST_ITEMS : saves
+    PRODUCTS ||--o{ WISHLIST_ITEMS : "saved in"
+    COUPONS ||--o{ ORDERS : "applied to"
     PRODUCTS ||--o{ CART_ITEMS : "in"
     ORDERS ||--|{ ORDER_ITEMS : contains
     PRODUCTS ||--o{ ORDER_ITEMS : "sold as"
@@ -392,8 +444,30 @@ erDiagram
     ORDERS {
         int id PK
         enum status
-        numeric totalPrice
+        numeric subtotal
+        numeric discountAmount
+        numeric totalPrice "subtotal - discountAmount"
+        string couponCode "snapshot"
         string shippingAddress
+    }
+    PRODUCT_IMAGES {
+        int id PK
+        string url
+        string publicId "Cloudinary id, never sent to clients"
+        int position "0 = main image"
+    }
+    COUPONS {
+        int id PK
+        string code UK "UPPER CASE"
+        enum type "percentage or fixed"
+        numeric value
+        int usageLimit "nullable"
+        int usedCount
+    }
+    WISHLIST_ITEMS {
+        int id PK
+        int userId UK
+        int productId UK
     }
     ORDER_ITEMS {
         int id PK
@@ -404,8 +478,8 @@ erDiagram
 ```
 
 Delete behaviour: removing a category sets `products.categoryId` to `NULL`; removing a product removes its
-reviews and cart lines and sets `order_items.productId` to `NULL`; removing a user removes their reviews and cart and
-sets `orders.userId` to `NULL`.
+reviews, images, wishlist entries and cart lines and sets `order_items.productId` to `NULL`; removing a user removes their
+reviews, cart and wishlist and sets `orders.userId` to `NULL`; removing a coupon sets `orders.couponId` to `NULL`.
 
 ---
 
@@ -418,7 +492,13 @@ sets `orders.userId` to `NULL`.
   (atomic update).
 - Forgot-password gives the same answer for unknown e-mails (no account enumeration).
 - A Google sign-in cannot take over an account that someone pre-registered with the same e-mail by password.
-- The role is read from the database on every protected request: a demoted or deleted admin loses access immediately.
+- **Secure by default:** `JwtAuthGuard` is global, so a route is protected unless it carries `@Public()`. An e2e test lists every
+  route of the app and fails if a route that is not in the expected public list answers without a token.
+- The user is read from the database on every protected request: a demoted or deleted user loses access immediately.
+- CORS is closed in production unless `CORS_ORIGINS` lists the front-end origins.
+- Unexpected errors answer `500 Internal server error`; the details only go to the log. The access log writes the route pattern,
+  never the real URL, so verification / reset tokens in links stay out of the logs.
+- Image uploads (Cloudinary): type whitelist (no SVG), size limit, kept in memory (nothing is written to the server disk).
 - Uploads: login required, extension chosen from the MIME type, random names, path traversal (`../`) blocked.
 - Rate limiting: 100 requests/minute/IP globally; login, register, forgot-password and reset-password 5/minute/IP.
 - Helmet headers, strict DTO validation (`whitelist` + `forbidNonWhitelisted`), parameterised SQL everywhere.
@@ -436,13 +516,15 @@ TZ=Africa/Cairo npm run test:e2e        # same suite under another time zone
 npm run test:cov                        # unit-test coverage
 ```
 
-The e2e suite (47 tests) runs against **real PostgreSQL** and a **real SMTP server** (`test/support/smtp-sink.ts` receives the
+The e2e suite (78 tests, plus 15 unit tests) runs against **real PostgreSQL** and a **real SMTP server** (`test/support/smtp-sink.ts` receives the
 e-mails). Only Cloudinary is faked. It **drops and rebuilds the whole schema from the migrations**, so it refuses to run unless the
 database is on `localhost` and its name contains `test` or `e2e`.
 
 It covers: the full auth flow, roles and data leaks, uploads, categories and products (search, filters, sorting, pagination),
-reviews, cart, orders, **concurrency** (40 buyers for 10 items, double-click checkout, parallel cancels, cancel and checkout
-at the same time without deadlocks), time zones, and a final consistency check (stock = initial − sold).
+reviews and ratings, product images, wishlist, coupons, cart, orders, **concurrency** (40 buyers for 10 items, 10 buyers for a
+coupon with 3 uses, parallel image uploads against the limit, double-click checkout, parallel cancels, cancel and checkout at the
+same time without deadlocks), CORS, the error format, the list of public routes, time zones, and a final consistency check
+(stock = initial − sold, totals = items − discount, coupon uses = live orders).
 
 The GitHub Actions workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs lint, build, unit and e2e tests on every push.
 
@@ -466,11 +548,16 @@ The GitHub Actions workflow in [`.github/workflows/ci.yml`](.github/workflows/ci
 
 ```
 src/
-  users/        auth, Google strategy, guards, decorators, DTOs, profile image
-  products/     products + query DTO (+ unit tests)
+  common/          shared by every module (see below)
+  config/          env validation
+  users/           auth, Google strategy, DTOs, profile image
+  products/        products, product images (+ unit tests)
   categories/   reviews/   cart/   orders/   uploads/
-  mail/         mail service and EJS templates (verify e-mail, reset password)
-  utils/        enums, pagination DTO, env validation, Cloudinary, DB error helpers
+  coupons/         coupon CRUD, validation and redemption
+  wishlist/        saved products
+  mail/            mail service and EJS templates (verify e-mail, reset password)
+  app.module.ts    imports + the global guards (rate limit -> auth -> roles)
+  app.setup.ts     HTTP setup: Helmet, CORS, trust proxy, Swagger (used by main.ts and by the e2e tests)
 db/
   data-source.ts   TypeORM data source used by the CLI and the app
   migrations/      schema history
@@ -479,28 +566,53 @@ rest_client/       sample requests (VS Code REST Client)
 .github/workflows/ CI
 ```
 
+### The `common` folder
+
+Code that more than one module uses lives in `src/common`. Each sub-folder has an `index.ts`, so imports look like
+`import { Auth, Public } from '../common/decorators'`.
+
+| Folder                         | Contains                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `guards/`                      | `JwtAuthGuard` (global: token + user from the database, skips `@Public()`), `RolesGuard` (global: checks `@Roles()`)    |
+| `decorators/`                  | `@Public()`, `@Auth(...roles)` (Swagger + roles), `@Roles()`, `@CurrentUser()`, `@ApiPaginated()`                       |
+| `pagination/`                  | `PaginationQueryDto` (`?page&limit`), `Paginated<T>` and `resolvePagination()`                                          |
+| `interceptors/`                | `PaginationInterceptor` (`Paginated` → array + `X-Total-Count`... headers), `LoggingInterceptor` (one line per request) |
+| `filters/`                     | `AllExceptionsFilter` (one error format, database errors → 4xx, 500 without details)                                    |
+| `cloudinary/`                  | `CloudinaryModule` / `CloudinaryService` (upload, delete, clear errors) and `deleteImageQuietly()`                      |
+| `upload/`                      | `imageUploadOptions()` — Multer options for image routes (memory storage, type whitelist, size limit)                   |
+| `enums/` `types/` `constants/` | `UserType`, `OrderStatus`, `CouponType`, `JwtPayloadType`, metadata keys, header names                                  |
+| `utils/`                       | `PG_ERROR` codes, `pgErrorCode()`, `rowsOf()`, `toCents()` / `fromCents()`, `escapeLike()`, `safeEqual()`               |
+| `transforms/` `transformers/`  | `@NormalizeEmail()`, `@NormalizeCode()`, the numeric column transformer                                                 |
+| `entities/`                    | `TimestampedEntity` (id + createdAt + updatedAt) for new tables                                                         |
+| `common.module.ts`             | Global module: JWT configuration, the global filter, interceptors and validation pipe                                   |
+
+**How to add a feature:** create the module, put `@Public()` only on routes everybody may call, `@Auth()` / `@Auth(UserType.ADMIN)` on
+the others (it documents them in Swagger), return `Paginated.of(items, total, query)` from list services, and add the entity to
+`db/data-source.ts` and a migration (`npm run migration:generate`).
+
 ---
 
 ## Deployment notes
 
 - Run `npm run build`, apply migrations against the production database, then `npm run start:prod`
   with `NODE_ENV=production` (reads `.env`, or real environment variables).
-- Behind a reverse proxy add `app.set('trust proxy', 1)` so rate limiting sees the real client IP.
+- Behind a reverse proxy (Vercel, Nginx...) set `TRUST_PROXY=1` so rate limiting sees the real client IP, not the proxy's.
+- Set `CORS_ORIGINS` to the URL(s) of your front-end; in production CORS is closed when it is empty.
 - Disk uploads (`/images`) do not work on serverless platforms such as Vercel and are lost on ephemeral
-  file systems; use Cloudinary or S3 there. Profile images already use Cloudinary.
+  file systems; use Cloudinary or S3 there. Profile images and product images already use Cloudinary.
 - Set `DOMAIN` to the public URL, otherwise e-mail links point at the wrong host.
 - The Swagger UI is enabled in every environment; protect or remove it if the API is public.
 
 ## Troubleshooting
 
-| Symptom                                                  | Cause / fix                                                                           |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `Missing required environment variables: ...` at startup | Fill them in the env file for your `NODE_ENV`, or export them                         |
-| `column "..." does not exist`                            | Migrations were not applied: `npm run migration:run`                                  |
-| Registration returns `503 Could not send the email`      | SMTP settings are wrong (port 465 is not supported, use 587 / 2525)                   |
-| Verification link points to the wrong host               | Fix `DOMAIN`                                                                          |
-| Google login: `redirect_uri_mismatch`                    | `GOOGLE_CALLBACK_URL` must exactly match an authorised redirect URI in Google Console |
-| e2e refuses to start                                     | The database must be on `localhost` and named like `nest_e2e` (it is wiped)           |
+| Symptom                                             | Cause / fix                                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `Invalid environment variables: ...` at startup     | Fill them in the env file for your `NODE_ENV`, or export them                         |
+| `column "..." does not exist`                       | Migrations were not applied: `npm run migration:run`                                  |
+| Registration returns `503 Could not send the email` | SMTP settings are wrong (port 465 is not supported, use 587 / 2525)                   |
+| Verification link points to the wrong host          | Fix `DOMAIN`                                                                          |
+| Google login: `redirect_uri_mismatch`               | `GOOGLE_CALLBACK_URL` must exactly match an authorised redirect URI in Google Console |
+| e2e refuses to start                                | The database must be on `localhost` and named like `nest_e2e` (it is wiped)           |
 
 ## Known limitations
 
@@ -510,3 +622,7 @@ rest_client/       sample requests (VS Code REST Client)
 - Deleting a user who created products (normally an admin) also deletes those products, because a product belongs to its creator.
 - Updating your password through `PUT /api/users` does not ask for the current password.
 - Product titles are stored in lower case.
+- A coupon has a total usage limit, but **no limit per customer** (the same user can use it on several orders).
+- Products cannot be sorted by rating (the rating is calculated per page, not stored).
+- Image uploads check the declared MIME type; Cloudinary rejects files that are not real images (`400`).
+- Prices have no currency field and there is no shipping cost or tax.

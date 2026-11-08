@@ -1,4 +1,4 @@
-export * from './db-errors';
-export * from './safe-equal';
+export * from './query-result';
+export * from './duration.util';
 export * from './sql';
 export * from './money';
