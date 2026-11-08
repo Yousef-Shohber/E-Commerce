@@ -1,14 +1,9 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from './categories.entity';
 import { CreateCategoryDto } from './dtos/create-category.dto';
 import { UpdateCategoryDto } from './dtos/update-category.dto';
-import { PG_ERROR, pgErrorCode } from '../common/utils';
 
 @Injectable()
 export class CategoriesService {
@@ -28,7 +23,7 @@ export class CategoriesService {
       description: dto.description ?? null,
     });
 
-    return this.saveOrConflict(category);
+    return this.categoriesRepository.save(category);
   }
 
   /**
@@ -66,7 +61,9 @@ export class CategoriesService {
     if (dto.name) category.name = dto.name.trim();
     category.description = dto.description ?? category.description;
 
-    return this.saveOrConflict(category);
+    // a name that is already taken is rejected by the database (unique) and
+    // answered by the exceptions filter
+    return this.categoriesRepository.save(category);
   }
 
   /**
@@ -79,16 +76,5 @@ export class CategoriesService {
 
     await this.categoriesRepository.remove(category);
     return { message: 'Category Deleted Successfully' };
-  }
-
-  private async saveOrConflict(category: Category) {
-    try {
-      return await this.categoriesRepository.save(category);
-    } catch (error) {
-      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
-        throw new ConflictException('Category name already exists');
-      }
-      throw error;
-    }
   }
 }
