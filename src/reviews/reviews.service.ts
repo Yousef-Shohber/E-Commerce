@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,41 +6,37 @@ import {
 import { Repository } from 'typeorm';
 import { Review } from './reviews.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserService } from '../users/users.service';
+import { User } from '../users/users.entity';
 import { ProductsService } from '../products/products.service';
 import { CreateReviewDto } from './dtos/create-review.dto';
 import { UpdateReviewDto } from './dtos/update-review.dto';
-import { JwtPayloadType } from '../common/types';
 import { UserType } from '../common/enums';
 import {
   Paginated,
   PaginationQueryDto,
   resolvePagination,
 } from '../common/pagination';
-import { PG_ERROR, pgErrorCode } from '../common/utils';
 
 @Injectable()
 export class ReviewsService {
   constructor(
     @InjectRepository(Review)
     private readonly reviewRepository: Repository<Review>,
-    private readonly userService: UserService,
     private readonly productService: ProductsService,
   ) {}
 
   /**
    * Create New Review
-   * @param userId for Logged In User
+   * @param user the Logged In User
    * @param productId for Product
    * @param CreateReviewDto for Review
    * @returns Review
    */
   public async createReview(
-    userId: number,
+    user: User,
     productId: number,
     dto: CreateReviewDto,
   ) {
-    const user = await this.userService.getCurrentUser(userId);
     const product = await this.productService.getOneBy(productId);
 
     const review = this.reviewRepository.create({
@@ -50,15 +45,7 @@ export class ReviewsService {
       product,
     });
 
-    let result: Review;
-    try {
-      result = await this.reviewRepository.save(review);
-    } catch (error) {
-      if (pgErrorCode(error) === PG_ERROR.UNIQUE_VIOLATION) {
-        throw new ConflictException('You already reviewed this product');
-      }
-      throw error;
-    }
+    const result = await this.reviewRepository.save(review);
 
     return {
       id: result.id,
@@ -150,12 +137,12 @@ export class ReviewsService {
   /**
    * Delete Review
    * @param reviewId for Review
-   * @param payload for User
+   * @param actor the Logged In User (the author, or an admin)
    * @returns Deleted Message
    */
-  public async deleteReview(reviewId: number, payload: JwtPayloadType) {
+  public async deleteReview(reviewId: number, actor: User) {
     const review = await this.getOneBy(reviewId);
-    if (review.user.id !== payload.id && payload.userType !== UserType.ADMIN) {
+    if (review.user.id !== actor.id && actor.userType !== UserType.ADMIN) {
       throw new ForbiddenException(
         'You are not authorized to delete this review',
       );

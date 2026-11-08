@@ -13,7 +13,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
 import { UserType } from '../common/enums';
 import { PaginationQueryDto } from '../common/pagination';
-import type { JwtPayloadType } from '../common/types';
+import type { User } from '../users/users.entity';
 import { CreateReviewDto } from './dtos/create-review.dto';
 import { UpdateReviewDto } from './dtos/update-review.dto';
 import { ReviewsService } from './reviews.service';
@@ -27,10 +27,10 @@ export class ReviewsController {
   @Auth()
   public createReview(
     @Param('productId', ParseIntPipe) productId: number,
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Body() body: CreateReviewDto,
   ) {
-    return this.reviewsService.createReview(payload.id, productId, body);
+    return this.reviewsService.createReview(user, productId, body);
   }
 
   @Get()
@@ -51,18 +51,18 @@ export class ReviewsController {
   updateReview(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateReviewDto,
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
   ) {
-    return this.reviewsService.updateReview(id, payload.id, body);
+    return this.reviewsService.updateReview(id, user.id, body);
   }
 
   @Delete(':id')
   @Auth()
   deleteReview(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
   ) {
-    return this.reviewsService.deleteReview(id, payload);
+    return this.reviewsService.deleteReview(id, user);
   }
 }
 
