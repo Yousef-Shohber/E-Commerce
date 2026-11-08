@@ -11,7 +11,7 @@ import {
 import { User } from '../users/users.entity';
 import { Review } from '../reviews/reviews.entity';
 import { Category } from '../categories/categories.entity';
-import { ProductImage } from './product-image.entity';
+import type { ImageRef } from '../common/cloudinary';
 
 @Entity({ name: 'products' })
 @Check('"stock" >= 0')
@@ -40,8 +40,8 @@ export class Product {
   @OneToMany(() => Review, (review) => review.product)
   reviews: Review[];
 
-  @OneToMany(() => ProductImage, (image) => image.product, { eager: true })
-  images: ProductImage[];
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  images: ImageRef[];
 
   @ManyToOne(() => User, (user) => user.product, {
     eager: true,

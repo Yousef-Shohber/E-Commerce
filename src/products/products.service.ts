@@ -1,4 +1,3 @@
-import { UserService } from './../users/users.service';
 import {
   BadRequestException,
   Injectable,
@@ -21,24 +20,24 @@ import { Category } from '../categories/categories.entity';
 import { Paginated, resolvePagination } from '../common/pagination';
 import { escapeLike } from '../common/utils';
 import { ProductImagesService } from './product-images.service';
+import { User } from '../users/users.entity';
+import { ErrorCode } from '../common/errors';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productsRepository: Repository<Product>,
-    private readonly userService: UserService,
     private readonly productImagesService: ProductImagesService,
   ) {}
 
   /**
    * Create New Product
-   * @param userId of Login User (Admin)
+   * @param user the Login User (Admin)
    * @param CreateProductDto for Product
    * @returns Product
    */
-  public async CreateProduct(userId: number, dto: CreateProductDto) {
-    const user = await this.userService.getCurrentUser(userId);
+  public async CreateProduct(user: User, dto: CreateProductDto) {
     const { categoryId, ...data } = dto;
 
     const newProduct = this.productsRepository.create({
@@ -107,7 +106,10 @@ export class ProductsService {
     });
 
     if (!product) {
-      throw new NotFoundException(`Product with id ${id} not found`);
+      throw new NotFoundException({
+        code: ErrorCode.PRODUCT_NOT_FOUND,
+        message: `Product with id ${id} not found`,
+      });
     }
 
     const [decorated] = await this.decorate([product]);
@@ -141,7 +143,7 @@ export class ProductsService {
    */
   public async delete(id: number) {
     const product = await this.getOneBy(id);
-    const publicIds = (product.images ?? []).map((image) => image.publicId);
+    const publicIds = product.images.map((image) => image.publicId);
 
     await this.productsRepository.remove(product);
     await this.productImagesService.discard(publicIds);
@@ -151,7 +153,6 @@ export class ProductsService {
 
   /**
    * Add what is not stored in the products table:
-   *  - the images in their order (main image first),
    *  - the average rating and the number of reviews, with ONE grouped query
    *    for the whole page (not one query per product).
    */
@@ -177,9 +178,6 @@ export class ProductsService {
       const stats = byProduct.get(product.id);
       product.ratingAverage = stats?.ratingAverage ?? 0;
       product.reviewsCount = stats?.reviewsCount ?? 0;
-      product.images = [...(product.images ?? [])].sort(
-        (a, b) => a.position - b.position || a.id - b.id,
-      );
     }
 
     return products;

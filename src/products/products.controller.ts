@@ -15,9 +15,10 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
 import { UserType } from '../common/enums';
-import type { JwtPayloadType } from '../common/types';
+import type { User } from '../users/users.entity';
 import { imageUploadOptions } from '../common/upload';
 import { CreateProductDto } from './dtos/create-product.dto';
+import { DeleteProductImageDto } from './dtos/delete-product-image.dto';
 import { ProductsQueryDto } from './dtos/products-query.dto';
 import { UpdateProductDto } from './dtos/update-product.dto';
 import { UploadProductImagesDto } from './dtos/upload-product-images.dto';
@@ -35,10 +36,10 @@ export class ProductsController {
   @Post()
   @Auth(UserType.ADMIN)
   public addProduct(
-    @CurrentUser() payload: JwtPayloadType,
+    @CurrentUser() user: User,
     @Body() product: CreateProductDto,
   ) {
-    return this.productsService.CreateProduct(payload.id, product);
+    return this.productsService.CreateProduct(user, product);
   }
 
   @Public()
@@ -83,12 +84,12 @@ export class ProductsController {
     return this.productImagesService.add(id, files);
   }
 
-  @Delete('/:id/images/:imageId')
+  @Delete('/:id/images')
   @Auth(UserType.ADMIN)
   public deleteImage(
     @Param('id', ParseIntPipe) id: number,
-    @Param('imageId', ParseIntPipe) imageId: number,
+    @Body() body: DeleteProductImageDto,
   ) {
-    return this.productImagesService.remove(id, imageId);
+    return this.productImagesService.remove(id, body.publicId);
   }
 }
