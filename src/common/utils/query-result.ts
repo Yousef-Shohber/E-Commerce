@@ -9,3 +9,18 @@ export function rowsOf<T = any>(result: unknown): T[] {
   }
   return result as T[];
 }
+
+/**
+    'SELECT * FROM products' returns ==> 
+    [
+      { id: 1, name: 'Laptop' },
+    ]
+
+    'UPDATE products SET stock = stock - 1 WHERE id = $1 RETURNING *'  returns ==>
+    [
+      [
+        { id: 1, name: 'Laptop', stock: 9 }
+      ],
+      1
+    ]
+ */

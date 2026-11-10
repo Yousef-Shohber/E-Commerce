@@ -1,26 +1,38 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
-import { DEFAULT_LIMIT, DEFAULT_PAGE, MAX_LIMIT } from './paginated';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export enum SortOrder {
+  ASC = 'ASC',
+  DESC = 'DESC',
+}
 
 export class PaginationQueryDto {
-  @ApiPropertyOptional({ default: DEFAULT_PAGE, minimum: 1 })
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(1_000_000)
-  @IsOptional()
-  page?: number = DEFAULT_PAGE;
+  page: number = 1;
 
-  @ApiPropertyOptional({
-    default: DEFAULT_LIMIT,
-    minimum: 1,
-    maximum: MAX_LIMIT,
-  })
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(MAX_LIMIT)
+  @Max(100)
+  limit: number = 10;
+
+  @ApiPropertyOptional({
+    description: 'Field to sort by (whitelisted per resource)',
+  })
   @IsOptional()
-  limit?: number = DEFAULT_LIMIT;
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ enum: SortOrder, default: SortOrder.DESC })
+  @IsOptional()
+  @IsEnum(SortOrder)
+  sortOrder: SortOrder = SortOrder.DESC;
 }

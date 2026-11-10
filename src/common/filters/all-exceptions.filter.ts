@@ -221,6 +221,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     res.status(statusCode).json({
+      success: false,
       statusCode,
       error: HttpStatus[statusCode] ?? 'ERROR',
       code,

@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
+import { isUUID } from 'class-validator';
 import { AccessTokenPayload } from '../../auth/types/token.types';
 import { UsersService } from '../../users/users.service';
 import { IS_PUBLIC_KEY } from '../constants';
@@ -58,7 +59,7 @@ export class JwtAuthGuard implements CanActivate {
       });
     }
 
-    if (typeof payload.userId !== 'number') {
+    if (typeof payload.userId !== 'string' || !isUUID(payload.userId)) {
       throw new UnauthorizedException({
         code: ErrorCode.ACCESS_TOKEN_INVALID,
         message: 'Invalid access token',

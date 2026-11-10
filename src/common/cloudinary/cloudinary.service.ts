@@ -24,10 +24,6 @@ export class CloudinaryService {
     });
   }
 
-  /**
-   * Upload one image (from memory) to a Cloudinary folder.
-   * Images bigger than 2000x2000 are scaled down before they are stored.
-   */
   public async uploadImage(
     file: Express.Multer.File,
     folder = 'profile-images',

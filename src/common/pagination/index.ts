@@ -1,2 +1,2 @@
-export * from './paginated';
 export * from './pagination-query.dto';
+export * from './pagination.utils';

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AllExceptionsFilter } from './filters';
-import { LoggingInterceptor, PaginationInterceptor } from './interceptors';
+import { LoggingInterceptor, ResponseInterceptor } from './interceptors';
 
 @Global()
 @Module({
@@ -24,7 +24,7 @@ import { LoggingInterceptor, PaginationInterceptor } from './interceptors';
 
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ClassSerializerInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: PaginationInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
   ],
 })
 export class CommonModule {}
