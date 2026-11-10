@@ -8,8 +8,10 @@ import {
   Post,
   Put,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
 import { UserType } from '../common/enums';
 import { PaginationQueryDto } from '../common/pagination';
@@ -61,8 +63,9 @@ export class ReviewsController {
   deleteReview(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.reviewsService.deleteReview(id, user);
+    return this.reviewsService.deleteReview(id, user, req.ip);
   }
 }
 

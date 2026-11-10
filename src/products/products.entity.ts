@@ -40,6 +40,7 @@ export class Product {
   @OneToMany(() => Review, (review) => review.product)
   reviews: Review[];
 
+  /** The first image is the main one */
   @Column({ type: 'jsonb', default: () => "'[]'" })
   images: ImageRef[];
 

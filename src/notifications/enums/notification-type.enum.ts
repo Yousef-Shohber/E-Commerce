@@ -1,0 +1,12 @@
+export enum NotificationType {
+  // To the customer
+  ORDER_CREATED = 'ORDER_CREATED',
+  ORDER_PAID = 'ORDER_PAID',
+  ORDER_SHIPPED = 'ORDER_SHIPPED',
+  ORDER_DELIVERED = 'ORDER_DELIVERED',
+  ORDER_CANCELLED = 'ORDER_CANCELLED',
+
+  // To the admins
+  NEW_ORDER = 'NEW_ORDER',
+  LOW_STOCK = 'LOW_STOCK',
+}

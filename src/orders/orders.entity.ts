@@ -21,8 +21,8 @@ export class Order {
   id: number;
 
   @Index()
-  @Column({ type: 'int', nullable: true })
-  userId: number | null;
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
 
   @Index()
   @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.PENDING })

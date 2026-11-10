@@ -3,13 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { PAGINATION_HEADERS } from './common/constants';
+import cookieParser = require('cookie-parser');
 
 export function configureApp(app: NestExpressApplication) {
   const config = app.get(ConfigService);
 
   app.enableShutdownHooks();
   app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(cookieParser());
 
   const proxies = config.get<number>('TRUST_PROXY');
   if (proxies) {
@@ -28,7 +29,7 @@ export function configureApp(app: NestExpressApplication) {
       origins.length > 0
         ? origins
         : config.get<string>('NODE_ENV') !== 'production',
-    exposedHeaders: Object.values(PAGINATION_HEADERS),
+    credentials: true,
   });
 
   setupSwagger(app, config.getOrThrow<string>('DOMAIN'));

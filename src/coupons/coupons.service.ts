@@ -4,18 +4,29 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import type { User } from '../users/users.entity';
 import { CartService } from '../cart/cart.service';
 import { CouponType } from '../common/enums';
 import {
   Paginated,
   PaginationQueryDto,
-  resolvePagination,
+  resolveSort,
+  toSkip,
 } from '../common/pagination';
-import { fromCents, rowsOf, toCents } from '../common/utils';
+import { fromCents, getChangedFields, rowsOf, toCents } from '../common/utils';
 import { Coupon } from './coupon.entity';
 import { CreateCouponDto } from './dtos/create-coupon.dto';
 import { UpdateCouponDto } from './dtos/update-coupon.dto';
+
+const COUPON_SORT_FIELDS = [
+  'createdAt',
+  'code',
+  'expiresAt',
+  'usedCount',
+] as const;
 
 /** How much a coupon takes off a subtotal (never more than the subtotal) */
 export function discountCentsFor(
@@ -40,11 +51,13 @@ export class CouponsService {
     @InjectRepository(Coupon)
     private readonly couponsRepository: Repository<Coupon>,
     private readonly cartService: CartService,
+    private readonly dataSource: DataSource,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   // Admin
 
-  public async create(dto: CreateCouponDto) {
+  public async create(dto: CreateCouponDto, actor: User, ip?: string) {
     const coupon = this.couponsRepository.create({
       minOrderAmount: 0,
       maxDiscountAmount: null,
@@ -55,16 +68,35 @@ export class CouponsService {
       ...withoutUndefined(dto),
     });
 
-    return this.saveChecked(coupon);
+    this.assertValid(coupon);
+
+    return this.dataSource.transaction(async (manager) => {
+      await manager.save(Coupon, coupon);
+
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.COUPON_CREATED,
+        entity: 'Coupon',
+        entityId: coupon.id,
+        metadata: { code: coupon.code, type: coupon.type, value: coupon.value },
+        ipAddress: ip,
+      });
+
+      return coupon;
+    });
   }
 
-  public async getAll(query: PaginationQueryDto = {}) {
-    const { skip, take } = resolvePagination(query);
+  public async getAll(query: PaginationQueryDto) {
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      COUPON_SORT_FIELDS,
+      'createdAt',
+    );
 
     const [items, total] = await this.couponsRepository.findAndCount({
-      order: { createdAt: 'DESC', id: 'DESC' },
-      skip,
-      take,
+      order: { [sortBy]: sortOrder, id: sortOrder },
+      skip: toSkip(query),
+      take: query.limit,
     });
 
     return Paginated.of(items, total, query);
@@ -80,18 +112,54 @@ export class CouponsService {
     return coupon;
   }
 
-  public async update(id: number, dto: UpdateCouponDto) {
+  public async update(
+    id: number,
+    dto: UpdateCouponDto,
+    actor: User,
+    ip?: string,
+  ) {
     const coupon = await this.getOneBy(id);
-    Object.assign(coupon, withoutUndefined(dto));
+    const data = withoutUndefined(dto);
+    const changes = getChangedFields<Coupon>(coupon, data as Partial<Coupon>);
 
-    return this.saveChecked(coupon);
+    Object.assign(coupon, data);
+    this.assertValid(coupon);
+
+    return this.dataSource.transaction(async (manager) => {
+      await manager.save(Coupon, coupon);
+
+      if (Object.keys(changes).length) {
+        await this.auditLogs.record(manager, {
+          userId: actor.id,
+          action: AuditAction.COUPON_UPDATED,
+          entity: 'Coupon',
+          entityId: id,
+          metadata: { code: coupon.code, changes },
+          ipAddress: ip,
+        });
+      }
+
+      return coupon;
+    });
   }
 
   /** Orders that used the coupon keep its code and the discount they got */
-  public async delete(id: number) {
+  public async delete(id: number, actor: User, ip?: string) {
     const coupon = await this.getOneBy(id);
 
-    await this.couponsRepository.remove(coupon);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.remove(Coupon, coupon);
+
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.COUPON_DELETED,
+        entity: 'Coupon',
+        entityId: id,
+        metadata: { code: coupon.code },
+        ipAddress: ip,
+      });
+    });
+
     return { message: 'Coupon Deleted Successfully' };
   }
 
@@ -101,7 +169,7 @@ export class CouponsService {
    * "What would I pay with this code?" for the cart of the logged in user.
    * Nothing is changed: the coupon is only used when the order is placed.
    */
-  public async preview(userId: number, rawCode: string) {
+  public async preview(userId: string, rawCode: string) {
     const cart = await this.cartService.getCart(userId);
     const subtotalCents = toCents(cart.total);
 
@@ -197,7 +265,7 @@ export class CouponsService {
     }
   }
 
-  private async saveChecked(coupon: Coupon) {
+  private assertValid(coupon: Coupon) {
     if (coupon.type === CouponType.PERCENTAGE && coupon.value > 100) {
       throw new BadRequestException('A percentage coupon cannot exceed 100');
     }
@@ -209,8 +277,6 @@ export class CouponsService {
     ) {
       throw new BadRequestException('expiresAt must be after startsAt');
     }
-
-    return this.couponsRepository.save(coupon);
   }
 }
 

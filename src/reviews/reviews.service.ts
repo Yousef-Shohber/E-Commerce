@@ -3,7 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { CacheInvalidationService } from '../common/cache';
 import { Review } from './reviews.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/users.entity';
@@ -14,8 +17,11 @@ import { UserType } from '../common/enums';
 import {
   Paginated,
   PaginationQueryDto,
-  resolvePagination,
+  resolveSort,
+  toSkip,
 } from '../common/pagination';
+
+const REVIEW_SORT_FIELDS = ['createdAt', 'rating'] as const;
 
 @Injectable()
 export class ReviewsService {
@@ -23,6 +29,9 @@ export class ReviewsService {
     @InjectRepository(Review)
     private readonly reviewRepository: Repository<Review>,
     private readonly productService: ProductsService,
+    private readonly dataSource: DataSource,
+    private readonly auditLogs: AuditLogsService,
+    private readonly cache: CacheInvalidationService,
   ) {}
 
   /**
@@ -45,7 +54,10 @@ export class ReviewsService {
       product,
     });
 
+    // reviewing the same product twice is rejected by the database
+    // (unique user + product) and answered by the exceptions filter
     const result = await this.reviewRepository.save(review);
+    await this.cache.invalidateDashboard();
 
     return {
       id: result.id,
@@ -60,16 +72,20 @@ export class ReviewsService {
 
   /**
    * Get All Review (Admin)
-   * @param query for Pagination (page, limit)
+   * @param query for Pagination (page, limit, sortBy, sortOrder)
    * @returns A page of reviews and the total
    */
-  public async getAllReviews(query: PaginationQueryDto = {}) {
-    const { skip, take } = resolvePagination(query);
+  public async getAllReviews(query: PaginationQueryDto) {
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      REVIEW_SORT_FIELDS,
+      'createdAt',
+    );
 
     const [items, total] = await this.reviewRepository.findAndCount({
-      order: { createdAt: 'DESC', id: 'DESC' },
-      skip,
-      take,
+      order: { [sortBy]: sortOrder, id: sortOrder },
+      skip: toSkip(query),
+      take: query.limit,
     });
 
     return Paginated.of(items, total, query);
@@ -81,19 +97,20 @@ export class ReviewsService {
    * @param query for Pagination (page, limit)
    * @returns A page of reviews, newest first, and the total
    */
-  public async getForProduct(
-    productId: number,
-    query: PaginationQueryDto = {},
-  ) {
+  public async getForProduct(productId: number, query: PaginationQueryDto) {
     await this.productService.getOneBy(productId);
 
-    const { skip, take } = resolvePagination(query);
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      REVIEW_SORT_FIELDS,
+      'createdAt',
+    );
 
     const [items, total] = await this.reviewRepository.findAndCount({
       where: { product: { id: productId } },
-      order: { createdAt: 'DESC', id: 'DESC' },
-      skip,
-      take,
+      order: { [sortBy]: sortOrder, id: sortOrder },
+      skip: toSkip(query),
+      take: query.limit,
     });
 
     return Paginated.of(items, total, query);
@@ -103,9 +120,10 @@ export class ReviewsService {
    * Get Single Review
    * @returns Review
    */
-  public async getOneBy(id: number) {
+  public async getOneBy(id: number, withProduct = false) {
     const review = await this.reviewRepository.findOne({
       where: { id },
+      relations: withProduct ? { product: true } : {},
     });
     if (!review) throw new NotFoundException('Review not found');
 
@@ -120,7 +138,7 @@ export class ReviewsService {
    */
   public async updateReview(
     reviewId: number,
-    userId: number,
+    userId: string,
     dto: UpdateReviewDto,
   ) {
     const review = await this.getOneBy(reviewId);
@@ -131,7 +149,9 @@ export class ReviewsService {
     }
 
     Object.assign(review, dto);
-    return this.reviewRepository.save(review);
+    const saved = await this.reviewRepository.save(review);
+    await this.cache.invalidateDashboard();
+    return saved;
   }
 
   /**
@@ -140,15 +160,31 @@ export class ReviewsService {
    * @param actor the Logged In User (the author, or an admin)
    * @returns Deleted Message
    */
-  public async deleteReview(reviewId: number, actor: User) {
-    const review = await this.getOneBy(reviewId);
+  public async deleteReview(reviewId: number, actor: User, ip?: string) {
+    const review = await this.getOneBy(reviewId, true);
     if (review.user.id !== actor.id && actor.userType !== UserType.ADMIN) {
       throw new ForbiddenException(
         'You are not authorized to delete this review',
       );
     }
 
-    await this.reviewRepository.remove(review);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.remove(review);
+
+      // Only a moderator removing somebody else's review is worth an entry
+      if (review.user.id !== actor.id) {
+        await this.auditLogs.record(manager, {
+          userId: actor.id,
+          action: AuditAction.REVIEW_DELETED,
+          entity: 'Review',
+          entityId: reviewId,
+          metadata: { authorId: review.user.id, productId: review.product?.id },
+          ipAddress: ip,
+        });
+      }
+    });
+    await this.cache.invalidateDashboard();
+
     return { message: 'Review deleted successfully' };
   }
 }

@@ -1,6 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { PaginationQueryDto } from '../../common/pagination';
 import { OrderStatus } from '../../common/enums';
 
@@ -13,10 +12,7 @@ export class OrdersQueryDto extends PaginationQueryDto {
 
 export class AdminOrdersQueryDto extends OrdersQueryDto {
   @ApiPropertyOptional({ description: 'Only orders of this user' })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(2147483647)
+  @IsUUID()
   @IsOptional()
-  userId?: number;
+  userId?: string;
 }

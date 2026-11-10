@@ -4,11 +4,6 @@ import * as bcrypt from 'bcryptjs';
 
 const BCRYPT_ROUNDS = 10;
 
-/**
- * The password is hashed as it is (the DTOs limit it to 72 characters, the
- * most bcrypt reads), so the hashes already stored in the database keep
- * working.
- */
 @Injectable()
 export class PasswordService {
   private dummyHash?: Promise<string>;

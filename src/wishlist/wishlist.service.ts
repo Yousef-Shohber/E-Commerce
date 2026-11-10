@@ -4,9 +4,12 @@ import { Repository } from 'typeorm';
 import {
   Paginated,
   PaginationQueryDto,
-  resolvePagination,
+  resolveSort,
+  toSkip,
 } from '../common/pagination';
 import { WishlistItem } from './wishlist-item.entity';
+
+const WISHLIST_SORT_FIELDS = ['createdAt'] as const;
 
 @Injectable()
 export class WishlistService {
@@ -15,15 +18,19 @@ export class WishlistService {
     private readonly wishlistRepository: Repository<WishlistItem>,
   ) {}
 
-  /** The saved products of the user, newest first */
-  public async getWishlist(userId: number, query: PaginationQueryDto = {}) {
-    const { skip, take } = resolvePagination(query);
+  /** The saved products of the user (newest first unless sorted otherwise) */
+  public async getWishlist(userId: string, query: PaginationQueryDto) {
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      WISHLIST_SORT_FIELDS,
+      'createdAt',
+    );
 
     const [items, total] = await this.wishlistRepository.findAndCount({
       where: { userId },
-      order: { createdAt: 'DESC', id: 'DESC' },
-      skip,
-      take,
+      order: { [sortBy]: sortOrder, id: sortOrder },
+      skip: toSkip(query),
+      take: query.limit,
     });
 
     return Paginated.of(items, total, query);
@@ -33,7 +40,9 @@ export class WishlistService {
    * Save a product. Saving it twice is fine (same result, no error), so a
    * double click or a retry does no harm.
    */
-  public async add(userId: number, productId: number) {
+  public async add(userId: string, productId: number) {
+    // a product that does not exist is rejected by the database (foreign key)
+    // and answered by the exceptions filter
     await this.wishlistRepository.query(
       `INSERT INTO wishlist_items ("userId", "productId") VALUES ($1, $2)
         ON CONFLICT ("userId", "productId") DO NOTHING`,
@@ -45,7 +54,7 @@ export class WishlistService {
     });
   }
 
-  public async remove(userId: number, productId: number) {
+  public async remove(userId: string, productId: number) {
     const result = await this.wishlistRepository.delete({ userId, productId });
 
     if (!result.affected) {

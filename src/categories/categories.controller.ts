@@ -7,10 +7,13 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
-import { Auth, Public } from '../common/decorators';
+import { Auth, CurrentUser, Public } from '../common/decorators';
 import { UserType } from '../common/enums';
+import type { User } from '../users/users.entity';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dtos/create-category.dto';
 import { UpdateCategoryDto } from './dtos/update-category.dto';
@@ -22,8 +25,12 @@ export class CategoriesController {
 
   @Post()
   @Auth(UserType.ADMIN)
-  public addCategory(@Body() body: CreateCategoryDto) {
-    return this.categoriesService.create(body);
+  public addCategory(
+    @Body() body: CreateCategoryDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
+  ) {
+    return this.categoriesService.create(body, user, req.ip);
   }
 
   @Public()
@@ -43,13 +50,19 @@ export class CategoriesController {
   public updateCategory(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateCategoryDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.categoriesService.update(id, body);
+    return this.categoriesService.update(id, body, user, req.ip);
   }
 
   @Delete('/:id')
   @Auth(UserType.ADMIN)
-  public deleteCategory(@Param('id', ParseIntPipe) id: number) {
-    return this.categoriesService.delete(id);
+  public deleteCategory(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Req() req: Request,
+  ) {
+    return this.categoriesService.delete(id, user, req.ip);
   }
 }

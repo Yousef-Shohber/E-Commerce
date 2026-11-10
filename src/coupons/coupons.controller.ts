@@ -10,7 +10,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { UserType } from '../common/enums';
@@ -38,8 +40,12 @@ export class CouponsController {
 
   @Post()
   @Auth(UserType.ADMIN)
-  public create(@Body() body: CreateCouponDto) {
-    return this.couponsService.create(body);
+  public create(
+    @Body() body: CreateCouponDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
+  ) {
+    return this.couponsService.create(body, user, req.ip);
   }
 
   @Get()
@@ -60,13 +66,19 @@ export class CouponsController {
   public update(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateCouponDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.couponsService.update(id, body);
+    return this.couponsService.update(id, body, user, req.ip);
   }
 
   @Delete('/:id')
   @Auth(UserType.ADMIN)
-  public remove(@Param('id', ParseIntPipe) id: number) {
-    return this.couponsService.delete(id);
+  public remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Req() req: Request,
+  ) {
+    return this.couponsService.delete(id, user, req.ip);
   }
 }

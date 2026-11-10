@@ -10,12 +10,9 @@ const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
   PORT: port.default(3000),
-  // Public URL of the API (Swagger server)
   DOMAIN: z.url(),
   CORS_ORIGINS: z.string().optional(),
-  // Number of reverse proxies in front of the app (0 = none)
   TRUST_PROXY: z.coerce.number().int().min(0).optional(),
-  // Requests per minute per IP for the whole API
   THROTTLE_LIMIT: z.coerce.number().int().min(1).default(100),
   THROTTLE_DISABLED: z.stringbool().default(false),
 
@@ -31,16 +28,18 @@ const envSchema = z.object({
   REDIS_PASSWORD: z.string().optional(),
 
   JWT_ACCESS_SECRET: z.string().min(32),
-  JWT_ACCESS_EXPIRES_IN: duration.default('1d'),
+  JWT_REFRESH_SECRET: z.string().min(32),
+  JWT_ACCESS_EXPIRES_IN: duration.default('15m'),
+  JWT_REFRESH_EXPIRES_IN: duration.default('7d'),
 
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: port.default(587),
   SMTP_USERNAME: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  // Falls back to SMTP_USERNAME when it is not set
   MAIL_FROM: z.string().min(1).optional(),
-  // Secret used to hash the OTP codes stored in Redis
   OTP_SECRET: z.string().min(32),
+  EMAIL_NOTIFICATIONS_ENABLED: z.stringbool().default(true),
+  FRONTEND_URL: z.url().optional(),
 
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),

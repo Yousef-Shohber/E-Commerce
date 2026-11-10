@@ -6,12 +6,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { CacheInvalidationService } from '../common/cache';
 import { CloudinaryService, deleteImageQuietly } from '../common/cloudinary';
 import { UserType } from '../common/enums';
 import { ErrorCode } from '../common/errors';
+import { Paginated, resolveSort, toSkip } from '../common/pagination';
+import { ListUsersQueryDto } from './dtos/list-users-query.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { User } from './users.entity';
+
+const USER_SORT_FIELDS = ['createdAt', 'email', 'username'] as const;
 
 export interface CreateUserData {
   email: string;
@@ -33,6 +40,9 @@ export class UsersService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly dataSource: DataSource,
+    private readonly auditLogs: AuditLogsService,
+    private readonly cache: CacheInvalidationService,
   ) {}
 
   // Lookups
@@ -41,7 +51,7 @@ export class UsersService {
    * @param id User ID
    * @returns The user, or `null` if there is no such user
    */
-  public findById(id: number): Promise<User | null> {
+  public findById(id: string): Promise<User | null> {
     return this.userRepository.findOneBy({ id });
   }
 
@@ -50,7 +60,7 @@ export class UsersService {
    * @returns The user
    * @throws NotFoundException If there is no such user
    */
-  public async getById(id: number): Promise<User> {
+  public async getById(id: string): Promise<User> {
     const user = await this.findById(id);
 
     if (!user) {
@@ -88,7 +98,7 @@ export class UsersService {
   }
 
   public findCredentialsById(
-    id: number,
+    id: string,
   ): Promise<Pick<User, 'id' | 'password'> | null> {
     return this.userRepository
       .createQueryBuilder('user')
@@ -98,10 +108,24 @@ export class UsersService {
   }
 
   /**
-   * Get All Users (Admin)
+   * Get All Users (Admin): filter, sort and paginate
+   * @returns A page of users and the total
    */
-  public getAllUser(): Promise<User[]> {
-    return this.userRepository.find();
+  public async getAllUser(query: ListUsersQueryDto): Promise<Paginated<User>> {
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      USER_SORT_FIELDS,
+      'createdAt',
+    );
+
+    const [data, total] = await this.userRepository.findAndCount({
+      where: query.userType ? { userType: query.userType } : {},
+      order: { [sortBy]: sortOrder, id: sortOrder },
+      skip: toSkip(query),
+      take: query.limit,
+    });
+
+    return Paginated.of(data, total, query);
   }
 
   // Account creation (used by the auth module)
@@ -140,11 +164,11 @@ export class UsersService {
     return this.userRepository.save(user);
   }
 
-  public async makeEmailVerified(id: number): Promise<void> {
+  public async makeEmailVerified(id: string): Promise<void> {
     await this.userRepository.update({ id }, { isAccountVerified: true });
   }
 
-  public async updatePassword(id: number, passwordHash: string): Promise<void> {
+  public async updatePassword(id: string, passwordHash: string): Promise<void> {
     await this.userRepository.update({ id }, { password: passwordHash });
   }
 
@@ -166,9 +190,10 @@ export class UsersService {
    * Delete User
    * @param userId User to delete
    * @param actor The logged in user (the same user, or an admin)
+   * @param ip IP address of the request, for the audit log
    * @returns Delete Message
    */
-  public async deleteUser(userId: number, actor: User) {
+  public async deleteUser(userId: string, actor: User, ip?: string) {
     if (userId !== actor.id && actor.userType !== UserType.ADMIN) {
       throw new ForbiddenException({
         code: ErrorCode.FORBIDDEN,
@@ -178,7 +203,19 @@ export class UsersService {
 
     const user = await this.getById(userId);
 
-    await this.userRepository.remove(user);
+    await this.dataSource.transaction(async (manager) => {
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.USER_DELETED,
+        entity: 'User',
+        entityId: userId,
+        metadata: { email: user.email, selfDelete: userId === actor.id },
+        ipAddress: ip,
+      });
+
+      await manager.remove(User, user);
+    });
+    await this.cache.invalidateDashboard();
 
     if (user.profileImagePublicId) {
       await deleteImageQuietly(

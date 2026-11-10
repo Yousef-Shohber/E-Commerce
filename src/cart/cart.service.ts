@@ -17,7 +17,7 @@ export class CartService {
    * @param userId User ID From Payload
    * @returns Cart items with product info and the total price
    */
-  public async getCart(userId: number) {
+  public async getCart(userId: string) {
     const rows = await this.cartRepository
       .createQueryBuilder('c')
       .leftJoin('c.product', 'p')
@@ -59,7 +59,7 @@ export class CartService {
    * @param dto Product And Quantity
    * @returns The Updated Cart
    */
-  public async addItem(userId: number, dto: AddToCartDto) {
+  public async addItem(userId: string, dto: AddToCartDto) {
     // one atomic statement, so two parallel requests can't lose an update.
     // A product that does not exist (foreign key) or a quantity over 99
     // (check) is rejected by the database and answered by the exceptions filter
@@ -79,7 +79,7 @@ export class CartService {
    * Set The Quantity Of A Product In The Cart
    */
   public async setQuantity(
-    userId: number,
+    userId: string,
     productId: number,
     quantity: number,
   ) {
@@ -98,7 +98,7 @@ export class CartService {
   /**
    * Remove A Product From The Cart
    */
-  public async removeItem(userId: number, productId: number) {
+  public async removeItem(userId: string, productId: number) {
     const result = await this.cartRepository.delete({ userId, productId });
 
     if (!result.affected) {
@@ -111,7 +111,7 @@ export class CartService {
   /**
    * Empty The Cart
    */
-  public async clear(userId: number) {
+  public async clear(userId: string) {
     await this.cartRepository.delete({ userId });
     return { message: 'Cart Cleared Successfully' };
   }

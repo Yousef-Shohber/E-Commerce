@@ -8,6 +8,9 @@ import { Order } from '../src/orders/orders.entity';
 import { Coupon } from '../src/coupons/coupon.entity';
 import { WishlistItem } from '../src/wishlist/wishlist-item.entity';
 import { OrderItem } from '../src/orders/order-item.entity';
+import { RefreshToken } from '../src/auth/entities/refresh-token.entity';
+import { AuditLog } from '../src/audit-logs/entities/audit-log.entity';
+import { Notification } from '../src/notifications/entities/notification.entity';
 import { config } from 'dotenv';
 
 // dotenv config
@@ -27,6 +30,9 @@ export const dataSourceOptions: DataSourceOptions = {
     Order,
     OrderItem,
     WishlistItem,
+    RefreshToken,
+    AuditLog,
+    Notification,
   ],
   migrations: ['dist/db/migrations/*.js'],
 };

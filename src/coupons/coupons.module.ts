@@ -4,11 +4,16 @@ import { CartModule } from '../cart/cart.module';
 import { CouponsController } from './coupons.controller';
 import { Coupon } from './coupon.entity';
 import { CouponsService } from './coupons.service';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   controllers: [CouponsController],
   providers: [CouponsService],
-  imports: [TypeOrmModule.forFeature([Coupon]), CartModule],
+  imports: [
+    AuditLogsModule,
+    TypeOrmModule.forFeature([Coupon]),
+    CartModule,
+  ],
   exports: [CouponsService],
 })
 export class CouponsModule {}

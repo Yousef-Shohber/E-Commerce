@@ -9,7 +9,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { UserType } from '../common/enums';
@@ -27,8 +29,12 @@ export class OrdersController {
 
   // Checkout: creates an order from the cart (optionally with a coupon)
   @Post()
-  public checkout(@CurrentUser() user: User, @Body() body: CheckoutDto) {
-    return this.ordersService.checkout(user.id, body);
+  public checkout(
+    @CurrentUser() user: User,
+    @Body() body: CheckoutDto,
+    @Req() req: Request,
+  ) {
+    return this.ordersService.checkout(user.id, body, req.ip);
   }
 
   @Get('/me')
@@ -60,8 +66,9 @@ export class OrdersController {
   public cancelOrder(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.ordersService.cancel(id, user);
+    return this.ordersService.cancel(id, user, req.ip);
   }
 
   @Patch('/:id/status')
@@ -69,7 +76,9 @@ export class OrdersController {
   public updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateOrderStatusDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.ordersService.updateStatus(id, body.status);
+    return this.ordersService.updateStatus(id, body.status, user, req.ip);
   }
 }

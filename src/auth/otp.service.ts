@@ -10,7 +10,6 @@ import {
 import { OtpPurpose } from './enums/otp-purpose.enum';
 
 // Runs atomically inside Redis: a correct code is consumed (single use), a
-// wrong one counts as an attempt, and the code is destroyed after too many.
 const VERIFY_SCRIPT = `
 local data = redis.call('HMGET', KEYS[1], 'hash', 'attempts')
 if not data[1] then return 'MISSING' end

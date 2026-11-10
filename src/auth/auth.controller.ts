@@ -6,8 +6,11 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
@@ -20,8 +23,9 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Auth, CurrentUser, Public } from '../common/decorators';
+import { ErrorCode } from '../common/errors';
 import { GoogleAuthGuard } from '../common/guards';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { User } from '../users/users.entity';
 import { AuthService } from './auth.service';
 import { AccessTokenDto } from './dto/auth-response.dto';
@@ -32,13 +36,21 @@ import { MessageResponseDto } from './dto/message-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { REFRESH_TOKEN_COOKIE } from './constants/auth.constants';
 import { GoogleProfile } from './google.strategy';
+import {
+  clearRefreshTokenCookie,
+  setRefreshTokenCookie,
+} from './utils/refresh-cookie.util';
 
 @ApiTags('Auth')
 @Throttle({ default: { limit: 5, ttl: 60_000 } })
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Public()
   @Post('register')
@@ -81,12 +93,74 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Log in and get an access token' })
+  @ApiOperation({
+    summary:
+      'Log in and get an access token. The refresh token is set as an httpOnly cookie.',
+  })
   @ApiOkResponse({ type: AccessTokenDto })
   @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
   @ApiForbiddenResponse({ description: 'The email is not verified yet' })
-  login(@Body() dto: LoginDto): Promise<AccessTokenDto> {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AccessTokenDto> {
+    const { refreshToken, ...body } = await this.authService.login(dto);
+
+    setRefreshTokenCookie(res, refreshToken, this.config);
+
+    return body;
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Rotate the refresh token cookie and get a new access token',
+  })
+  @ApiOkResponse({ type: AccessTokenDto })
+  @ApiUnauthorizedResponse({
+    description:
+      'Missing, invalid, expired or reused refresh token (reuse revokes the whole session family)',
+  })
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AccessTokenDto> {
+    const token = req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined;
+
+    if (!token) {
+      throw new UnauthorizedException({
+        code: ErrorCode.REFRESH_TOKEN_MISSING,
+        message: 'Missing refresh token',
+      });
+    }
+
+    const { refreshToken, ...body } = await this.authService.refresh(token);
+
+    setRefreshTokenCookie(res, refreshToken, this.config);
+
+    return body;
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Revoke the current session and clear the refresh token cookie',
+  })
+  @ApiOkResponse({ description: 'Always succeeds (idempotent)' })
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<null> {
+    const token = req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined;
+
+    if (token) {
+      await this.authService.logout(token);
+      clearRefreshTokenCookie(res, this.config);
+    }
+
+    return null;
   }
 
   // Google
@@ -100,12 +174,22 @@ export class AuthController {
   @Public()
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Google OAuth callback, returns the access token' })
+  @ApiOperation({
+    summary:
+      'Google OAuth callback, returns the access token and sets the refresh token cookie',
+  })
   @ApiOkResponse({ type: AccessTokenDto })
-  googleCallback(
+  async googleCallback(
     @Req() req: Request & { user: GoogleProfile },
+    @Res({ passthrough: true }) res: Response,
   ): Promise<AccessTokenDto> {
-    return this.authService.loginWithGoogle(req.user);
+    const { refreshToken, ...body } = await this.authService.loginWithGoogle(
+      req.user,
+    );
+
+    setRefreshTokenCookie(res, refreshToken, this.config);
+
+    return body;
   }
 
   // Password
@@ -126,19 +210,33 @@ export class AuthController {
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set a new password with the reset code' })
+  @ApiOperation({
+    summary: 'Set a new password with the reset code',
+    description: 'Revokes all refresh tokens of the user.',
+  })
   @ApiOkResponse({ type: MessageResponseDto })
   @ApiBadRequestResponse({
     description: 'Invalid or expired code, or validation failed',
   })
-  resetPassword(@Body() dto: ResetPasswordDto): Promise<MessageResponseDto> {
-    return this.authService.resetPassword(dto);
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<MessageResponseDto> {
+    const result = await this.authService.resetPassword(dto);
+
+    clearRefreshTokenCookie(res, this.config);
+
+    return result;
   }
 
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @Auth()
-  @ApiOperation({ summary: 'Change the password of the logged in user' })
+  @ApiOperation({
+    summary: 'Change the password of the logged in user',
+    description:
+      'Revokes every other session of the user. The current session (identified by the refresh token cookie) stays signed in. Accounts that only use Google sign-in have no password yet and must use "forgot password" to set one.',
+  })
   @ApiOkResponse({ type: MessageResponseDto })
   @ApiBadRequestResponse({
     description: 'Wrong current password, or the new one is the same',
@@ -146,7 +244,11 @@ export class AuthController {
   changePassword(
     @CurrentUser() user: User,
     @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
   ): Promise<MessageResponseDto> {
-    return this.authService.changePassword(user, dto);
+    const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE] as
+      string | undefined;
+
+    return this.authService.changePassword(user, dto, refreshToken);
   }
 }

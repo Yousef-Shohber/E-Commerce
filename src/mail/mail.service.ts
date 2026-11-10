@@ -1,9 +1,15 @@
 import { MailerService } from '@nestjs-modules/mailer';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OTP_TTL_SECONDS } from '../auth/constants/otp.constants';
 import { OtpPurpose } from '../auth/enums/otp-purpose.enum';
 
 const APP_NAME = 'Nest Shop';
+
+export interface NotificationEmail {
+  title: string;
+  message: string;
+}
 
 const OTP_COPY: Record<
   OtpPurpose,
@@ -25,7 +31,10 @@ const OTP_COPY: Record<
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * Email a one-time code.
@@ -59,6 +68,40 @@ export class MailService {
     } catch (error) {
       this.logger.error(
         `Failed to send ${purpose} email`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  /**
+   * Email the copy of an in-app notification.
+   * Like `sendOtp`, this never throws: a mail failure is logged and must not
+   * affect the business operation that triggered it.
+   * @param to Recipient email address
+   * @param username Recipient name for the greeting (may be empty)
+   * @param notification The notification title and message
+   */
+  public async sendNotification(
+    to: string,
+    username: string | null | undefined,
+    notification: NotificationEmail,
+  ): Promise<void> {
+    try {
+      await this.mailerService.sendMail({
+        to,
+        subject: `${APP_NAME}: ${notification.title}`.replace(/[\r\n]+/g, ' '),
+        template: 'notification',
+        context: {
+          appName: APP_NAME,
+          appUrl: this.config.get<string>('FRONTEND_URL') ?? null,
+          name: username?.trim() || 'there',
+          title: notification.title,
+          message: notification.message,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to send notification email',
         error instanceof Error ? error.stack : String(error),
       );
     }

@@ -12,16 +12,22 @@ import {
   Between,
   MoreThanOrEqual,
   LessThanOrEqual,
+  DataSource,
   Repository,
 } from 'typeorm';
 import { Product } from './products.entity';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { CacheInvalidationService } from '../common/cache';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Category } from '../categories/categories.entity';
-import { Paginated, resolvePagination } from '../common/pagination';
-import { escapeLike } from '../common/utils';
+import { Paginated, resolveSort, toSkip } from '../common/pagination';
+import { escapeLike, getChangedFields } from '../common/utils';
 import { ProductImagesService } from './product-images.service';
 import { User } from '../users/users.entity';
 import { ErrorCode } from '../common/errors';
+
+const PRODUCT_SORT_FIELDS = ['createdAt', 'price', 'title'] as const;
 
 @Injectable()
 export class ProductsService {
@@ -29,33 +35,64 @@ export class ProductsService {
     @InjectRepository(Product)
     private readonly productsRepository: Repository<Product>,
     private readonly productImagesService: ProductImagesService,
+    private readonly dataSource: DataSource,
+    private readonly auditLogs: AuditLogsService,
+    private readonly cache: CacheInvalidationService,
   ) {}
 
   /**
    * Create New Product
    * @param user the Login User (Admin)
    * @param CreateProductDto for Product
+   * @param ip IP address of the request, for the audit log
    * @returns Product
    */
-  public async CreateProduct(user: User, dto: CreateProductDto) {
+  public async CreateProduct(user: User, dto: CreateProductDto, ip?: string) {
     const { categoryId, ...data } = dto;
+    const category = await this.findCategory(categoryId);
 
-    const newProduct = this.productsRepository.create({
-      ...data,
-      title: dto.title.toLowerCase(),
-      user,
-      category: await this.findCategory(categoryId),
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const product = manager.create(Product, {
+        ...data,
+        title: dto.title.toLowerCase(),
+        user,
+        category,
+      });
+      await manager.save(Product, product);
+
+      await this.auditLogs.record(manager, {
+        userId: user.id,
+        action: AuditAction.PRODUCT_CREATED,
+        entity: 'Product',
+        entityId: product.id,
+        metadata: {
+          title: product.title,
+          price: product.price,
+          stock: product.stock,
+          categoryId: category?.id ?? null,
+        },
+        ipAddress: ip,
+      });
+
+      return product;
     });
-    return await this.productsRepository.save(newProduct);
+
+    await this.cache.invalidateDashboard();
+
+    return saved;
   }
 
   /**
    * Get All Product (filter, sort and paginate)
    * @returns A page of products (with images and rating) and the total
    */
-  public async getAll(query: ProductsQueryDto = {}) {
+  public async getAll(query: ProductsQueryDto) {
     const { title, minPrice, maxPrice, categoryId } = query;
-    const { skip, take } = resolvePagination(query);
+    const { sortBy, sortOrder } = resolveSort(
+      query,
+      PRODUCT_SORT_FIELDS,
+      'createdAt',
+    );
 
     if (
       minPrice !== undefined &&
@@ -84,12 +121,9 @@ export class ProductsService {
 
     const [items, total] = await this.productsRepository.findAndCount({
       where,
-      order: {
-        [query.sortBy ?? 'createdAt']: query.order ?? 'DESC',
-        id: 'ASC',
-      },
-      skip,
-      take,
+      order: { [sortBy]: sortOrder, id: 'ASC' },
+      skip: toSkip(query),
+      take: query.limit,
     });
 
     return Paginated.of(await this.decorate(items), total, query);
@@ -118,11 +152,27 @@ export class ProductsService {
 
   /**
    * Update Product
+   * Only the fields that really change are audited (with the `before` and
+   * `after` of each); a request that changes nothing writes no audit entry.
    * @param UpdateProductDto for Product
    * @param id of Product
+   * @param actor the Logged In User (Admin)
+   * @param ip IP address of the request, for the audit log
    */
-  public async update(id: number, dto: UpdateProductDto) {
+  public async update(
+    id: number,
+    dto: UpdateProductDto,
+    actor: User,
+    ip?: string,
+  ) {
     const product = await this.getOneBy(id);
+
+    const changes = getChangedFields<Product>(product, {
+      title: dto.title ? dto.title.toLowerCase() : undefined,
+      description: dto.description,
+      price: dto.price,
+      stock: dto.stock,
+    });
 
     if (dto.title) product.title = dto.title.toLowerCase();
     product.description = dto.description ?? product.description;
@@ -130,23 +180,61 @@ export class ProductsService {
     product.stock = dto.stock ?? product.stock;
 
     if (dto.categoryId !== undefined) {
-      product.category = await this.findCategory(dto.categoryId);
+      const category = await this.findCategory(dto.categoryId);
+      const before = product.category?.id ?? null;
+      const after = category?.id ?? null;
+      if (before !== after) changes.categoryId = { before, after };
+      product.category = category;
     }
 
-    return await this.productsRepository.save(product);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      await manager.save(Product, product);
+
+      if (Object.keys(changes).length) {
+        await this.auditLogs.record(manager, {
+          userId: actor.id,
+          action: AuditAction.PRODUCT_UPDATED,
+          entity: 'Product',
+          entityId: product.id,
+          metadata: { changes },
+          ipAddress: ip,
+        });
+      }
+
+      return product;
+    });
+
+    await this.cache.invalidateDashboard();
+
+    return saved;
   }
 
   /**
    * Delete Product (its images are removed from Cloudinary too)
    * @param id of Product
+   * @param actor the Logged In User (Admin)
+   * @param ip IP address of the request, for the audit log
    * @returns Deleted Message
    */
-  public async delete(id: number) {
+  public async delete(id: number, actor: User, ip?: string) {
     const product = await this.getOneBy(id);
     const publicIds = product.images.map((image) => image.publicId);
 
-    await this.productsRepository.remove(product);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.remove(Product, product);
+
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.PRODUCT_DELETED,
+        entity: 'Product',
+        entityId: id,
+        metadata: { title: product.title },
+        ipAddress: ip,
+      });
+    });
+
     await this.productImagesService.discard(publicIds);
+    await this.cache.invalidateDashboard();
 
     return { message: 'Product Deleted Successfully' };
   }

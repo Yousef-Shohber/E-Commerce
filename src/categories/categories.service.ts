@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { getChangedFields } from '../common/utils';
+import type { User } from '../users/users.entity';
 import { Category } from './categories.entity';
 import { CreateCategoryDto } from './dtos/create-category.dto';
 import { UpdateCategoryDto } from './dtos/update-category.dto';
@@ -10,6 +14,8 @@ export class CategoriesService {
   constructor(
     @InjectRepository(Category)
     private readonly categoriesRepository: Repository<Category>,
+    private readonly dataSource: DataSource,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   /**
@@ -17,13 +23,25 @@ export class CategoriesService {
    * @param dto Data From Create Category
    * @returns Category
    */
-  public async create(dto: CreateCategoryDto) {
-    const category = this.categoriesRepository.create({
-      name: dto.name.trim(),
-      description: dto.description ?? null,
-    });
+  public async create(dto: CreateCategoryDto, actor: User, ip?: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const category = manager.create(Category, {
+        name: dto.name.trim(),
+        description: dto.description ?? null,
+      });
+      await manager.save(Category, category);
 
-    return this.categoriesRepository.save(category);
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.CATEGORY_CREATED,
+        entity: 'Category',
+        entityId: category.id,
+        metadata: { name: category.name },
+        ipAddress: ip,
+      });
+
+      return category;
+    });
   }
 
   /**
@@ -55,15 +73,40 @@ export class CategoriesService {
    * @param dto Data From Update Category
    * @returns Updated Category
    */
-  public async update(id: number, dto: UpdateCategoryDto) {
+  public async update(
+    id: number,
+    dto: UpdateCategoryDto,
+    actor: User,
+    ip?: string,
+  ) {
     const category = await this.getOneBy(id);
+
+    const changes = getChangedFields<Category>(category, {
+      name: dto.name?.trim(),
+      description: dto.description,
+    });
 
     if (dto.name) category.name = dto.name.trim();
     category.description = dto.description ?? category.description;
 
     // a name that is already taken is rejected by the database (unique) and
     // answered by the exceptions filter
-    return this.categoriesRepository.save(category);
+    return this.dataSource.transaction(async (manager) => {
+      await manager.save(Category, category);
+
+      if (Object.keys(changes).length) {
+        await this.auditLogs.record(manager, {
+          userId: actor.id,
+          action: AuditAction.CATEGORY_UPDATED,
+          entity: 'Category',
+          entityId: id,
+          metadata: { changes },
+          ipAddress: ip,
+        });
+      }
+
+      return category;
+    });
   }
 
   /**
@@ -71,10 +114,22 @@ export class CategoriesService {
    * @param id of Category
    * @returns Deleted Message
    */
-  public async delete(id: number) {
+  public async delete(id: number, actor: User, ip?: string) {
     const category = await this.getOneBy(id);
 
-    await this.categoriesRepository.remove(category);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.remove(Category, category);
+
+      await this.auditLogs.record(manager, {
+        userId: actor.id,
+        action: AuditAction.CATEGORY_DELETED,
+        entity: 'Category',
+        entityId: id,
+        metadata: { name: category.name },
+        ipAddress: ip,
+      });
+    });
+
     return { message: 'Category Deleted Successfully' };
   }
 }

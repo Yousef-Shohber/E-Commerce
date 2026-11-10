@@ -4,20 +4,24 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
+  ParseUUIDPipe,
   Post,
   Put,
   SerializeOptions,
   UploadedFile,
   UseInterceptors,
   Body,
+  Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { Auth, CurrentUser } from '../common/decorators';
+import { ApiPaginated, Auth, CurrentUser } from '../common/decorators';
 import { UserType } from '../common/enums';
 import { imageUploadOptions } from '../common/upload';
 import { ImageUploadedDto } from './dtos/image-upload.dto';
+import { ListUsersQueryDto } from './dtos/list-users-query.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { User } from './users.entity';
 import { UsersService } from './users.service';
@@ -74,16 +78,18 @@ export class UsersController {
   @Get()
   @SerializeOptions({ groups: ['admin'] })
   @Auth(UserType.ADMIN)
-  public getAllUser() {
-    return this.usersService.getAllUser();
+  @ApiPaginated('A page of users')
+  public getAllUser(@Query() query: ListUsersQueryDto) {
+    return this.usersService.getAllUser(query);
   }
 
   @Delete(':id')
   @Auth()
   public deleteUser(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.usersService.deleteUser(id, user);
+    return this.usersService.deleteUser(id, user, req.ip);
   }
 }

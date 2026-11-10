@@ -8,10 +8,12 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { ApiPaginated, Auth, CurrentUser, Public } from '../common/decorators';
 import { UserType } from '../common/enums';
@@ -38,8 +40,9 @@ export class ProductsController {
   public addProduct(
     @CurrentUser() user: User,
     @Body() product: CreateProductDto,
+    @Req() req: Request,
   ) {
-    return this.productsService.CreateProduct(user, product);
+    return this.productsService.CreateProduct(user, product, req.ip);
   }
 
   @Public()
@@ -60,14 +63,20 @@ export class ProductsController {
   public updateProduct(
     @Param('id', ParseIntPipe) id: number,
     @Body() product: UpdateProductDto,
+    @CurrentUser() user: User,
+    @Req() req: Request,
   ) {
-    return this.productsService.update(id, product);
+    return this.productsService.update(id, product, user, req.ip);
   }
 
   @Delete('/:id')
   @Auth(UserType.ADMIN)
-  public deleteProduct(@Param('id', ParseIntPipe) id: number) {
-    return this.productsService.delete(id);
+  public deleteProduct(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+    @Req() req: Request,
+  ) {
+    return this.productsService.delete(id, user, req.ip);
   }
 
   // Images

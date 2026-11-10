@@ -13,8 +13,8 @@ import { UserType } from '../common/enums';
 
 @Entity({ name: 'users' })
 export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ type: 'varchar', length: 150, nullable: true })
   username: string;
