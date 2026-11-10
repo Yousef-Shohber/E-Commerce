@@ -1,0 +1,17 @@
+@token = PASTE_YOUR_TOKEN_HERE
+
+### My notifications (meta.unreadCount = total unread)
+GET http://localhost:3000/api/v1/notifications?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### Only the unread ones
+GET http://localhost:3000/api/v1/notifications?unread=true
+Authorization: Bearer {{token}}
+
+### Mark one as read
+PATCH http://localhost:3000/api/v1/notifications/1/read
+Authorization: Bearer {{token}}
+
+### Mark all as read
+PATCH http://localhost:3000/api/v1/notifications/read-all
+Authorization: Bearer {{token}}

@@ -1,0 +1,16 @@
+# Refresh tokens live in an httpOnly cookie. In VS Code REST Client the cookie is kept
+# between requests automatically, so run Login first, then Refresh.
+
+POST http://localhost:3000/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "Sonic@gmail.com",
+  "password": "Sonic123"
+}
+
+### Refresh (rotates the cookie, returns a new access token)
+POST http://localhost:3000/api/v1/auth/refresh
+
+### Logout (revokes this session)
+POST http://localhost:3000/api/v1/auth/logout

@@ -1,0 +1,10 @@
+# Admin token
+@token = PASTE_YOUR_ADMIN_TOKEN_HERE
+
+### All entries, newest first
+GET http://localhost:3000/api/v1/audit-logs?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Filter by action / entity / user
+GET http://localhost:3000/api/v1/audit-logs?action=ORDER_STATUS_CHANGED&entity=Order&userId=<user-uuid>
+Authorization: Bearer {{token}}

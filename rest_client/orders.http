@@ -20,7 +20,7 @@ Authorization: Bearer {{token}}
 POST http://localhost:3000/api/v1/orders/1/cancel
 Authorization: Bearer {{token}}
 
-### All orders (admin) (?userId=1&status=paid)
+### All orders (admin) (?userId=<user-uuid>&status=paid)
 GET http://localhost:3000/api/v1/orders
 Authorization: Bearer {{token}}
 

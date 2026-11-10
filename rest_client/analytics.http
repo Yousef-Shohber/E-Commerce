@@ -1,0 +1,6 @@
+# Admin token
+@token = PASTE_YOUR_ADMIN_TOKEN_HERE
+
+### Dashboard statistics
+GET http://localhost:3000/api/v1/analytics/dashboard
+Authorization: Bearer {{token}}
